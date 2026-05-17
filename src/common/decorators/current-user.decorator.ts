@@ -1,12 +1,14 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { User } from '@supabase/supabase-js';
-import { AuthenticatedRequest } from '../types/authenticated-request';
+import {
+  AuthUser,
+  AuthenticatedRequest,
+} from '../types/authenticated-request';
 
 export const CurrentUser = createParamDecorator(
   (
-    data: keyof User | undefined,
+    data: keyof AuthUser | undefined,
     ctx: ExecutionContext,
-  ): User | User[keyof User] | undefined => {
+  ): AuthUser | AuthUser[keyof AuthUser] | undefined => {
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = req.user;
     if (!user) return undefined;

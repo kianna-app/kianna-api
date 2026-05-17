@@ -5,8 +5,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createSupabaseAnonClient } from '../../config/supabase.config';
+import {
+  createSupabaseAnonClient,
+  createSupabaseClient,
+} from '../../config/supabase.config';
 import { AuthenticatedRequest } from '../types/authenticated-request';
+
+interface ProfissionalRow {
+  id: string;
+  role: string | null;
+}
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
@@ -24,7 +32,18 @@ export class SupabaseAuthGuard implements CanActivate {
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) throw new UnauthorizedException('Token inválido');
 
-    req.user = data.user;
+    const admin = createSupabaseClient(this.config);
+    const { data: prof } = await admin
+      .from('profissionais')
+      .select('id, role')
+      .eq('user_id', data.user.id)
+      .single<ProfissionalRow>();
+
+    req.user = {
+      ...data.user,
+      profissional_id: prof?.id,
+      role: prof?.role ?? undefined,
+    };
     return true;
   }
 }

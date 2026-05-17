@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
+import { DisponibilidadesController } from './disponibilidades.controller';
+import { DisponibilidadesService } from './disponibilidades.service';
 
-@Module({})
+@Module({
+  controllers: [DisponibilidadesController],
+  providers: [DisponibilidadesService],
+  exports: [DisponibilidadesService],
+})
 export class DisponibilidadesModule {}
