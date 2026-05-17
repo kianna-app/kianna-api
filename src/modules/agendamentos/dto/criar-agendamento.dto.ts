@@ -1,5 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsISO8601, IsString, IsUUID, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsISO8601,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CriarAgendamentoDto {
   @ApiProperty({ format: 'uuid' })
@@ -23,4 +30,15 @@ export class CriarAgendamentoDto {
   @ApiProperty({ format: 'date-time' })
   @IsISO8601()
   data_hora!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  observacoes?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  agendamento_origem_id?: string;
 }

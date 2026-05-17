@@ -1,8 +1,17 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ProfissionaisService } from './profissionais.service';
+import { AtualizarPerfilDto } from './dto/atualizar-perfil.dto';
 
 @ApiTags('profissionais')
 @Controller('api/profissionais')
@@ -13,8 +22,21 @@ export class ProfissionaisController {
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)
   @ApiOperation({ summary: 'Dados do profissional logado' })
-  me(@CurrentUser('id') userId: string) {
+  me(@CurrentUser('id') userId: string | undefined) {
+    if (!userId) throw new UnauthorizedException();
     return this.service.porUserId(userId);
+  }
+
+  @Patch('me')
+  @ApiBearerAuth()
+  @UseGuards(SupabaseAuthGuard)
+  @ApiOperation({ summary: 'Atualizar perfil do profissional logado' })
+  atualizarMe(
+    @CurrentUser('id') userId: string | undefined,
+    @Body() dto: AtualizarPerfilDto,
+  ) {
+    if (!userId) throw new UnauthorizedException();
+    return this.service.atualizarPorUserId(userId, dto);
   }
 
   @Get(':slug')

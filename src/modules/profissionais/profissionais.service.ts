@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseClient } from '../../config/supabase.config';
+import { AtualizarPerfilDto } from './dto/atualizar-perfil.dto';
 
 export interface Profissional {
   id: string;
@@ -10,14 +15,41 @@ export interface Profissional {
   nome: string;
   whatsapp?: string;
   foto_url?: string | null;
+  especialidade?: string | null;
   bio?: string | null;
   role?: string;
+  antecedencia_minima_horas?: number;
+  antecedencia_maxima_dias?: number | null;
+  timezone?: string;
+  ativo?: boolean;
+  onboarding_concluido?: boolean;
+  [key: string]: unknown;
 }
 
-export type ProfissionalPublico = Pick<
-  Profissional,
-  'id' | 'slug' | 'nome' | 'foto_url' | 'bio' | 'whatsapp'
->;
+const PUBLIC_FIELDS = [
+  'id',
+  'nome',
+  'slug',
+  'foto_url',
+  'especialidade',
+  'bio',
+  'whatsapp',
+  'endereco_cep',
+  'endereco_rua',
+  'endereco_numero',
+  'endereco_complemento',
+  'endereco_bairro',
+  'endereco_cidade',
+  'endereco_estado',
+  'instagram_url',
+  'facebook_url',
+  'twitter_url',
+  'youtube_url',
+  'links_personalizados',
+  'antecedencia_minima_horas',
+  'antecedencia_maxima_dias',
+  'timezone',
+].join(', ');
 
 @Injectable()
 export class ProfissionaisService {
@@ -39,15 +71,39 @@ export class ProfissionaisService {
     return data;
   }
 
-  async porSlug(slug: string): Promise<ProfissionalPublico> {
+  async porSlug(slug: string): Promise<Profissional> {
     const { data, error } = await this.supabase
       .from('profissionais')
-      .select('id, slug, nome, foto_url, bio, whatsapp')
+      .select(PUBLIC_FIELDS)
       .eq('slug', slug)
-      .single<ProfissionalPublico>();
+      .eq('ativo', true)
+      .single<Profissional>();
 
     if (error || !data)
       throw new NotFoundException('Profissional não encontrado');
+    return data;
+  }
+
+  async atualizarPorUserId(
+    userId: string,
+    dto: AtualizarPerfilDto,
+  ): Promise<Profissional> {
+    const payload: Record<string, unknown> = { ...dto };
+    if (Object.keys(payload).length === 0) {
+      return this.porUserId(userId);
+    }
+
+    const { data, error } = await this.supabase
+      .from('profissionais')
+      .update(payload)
+      .eq('user_id', userId)
+      .select()
+      .single<Profissional>();
+
+    if (error || !data)
+      throw new InternalServerErrorException(
+        `Erro ao atualizar perfil: ${error?.message ?? 'desconhecido'}`,
+      );
     return data;
   }
 }
