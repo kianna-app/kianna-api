@@ -84,6 +84,69 @@ export class ProfissionaisService {
     return data;
   }
 
+  async porSlugInterno(slug: string): Promise<Profissional | null> {
+    const { data } = await this.supabase
+      .from('profissionais')
+      .select('*')
+      .eq('slug', slug)
+      .eq('ativo', true)
+      .maybeSingle<Profissional>();
+    return data ?? null;
+  }
+
+  filtrarCamposPublicos(prof: Profissional): Partial<Profissional> {
+    const campos = PUBLIC_FIELDS.split(', ').map((c) => c.trim());
+    const out: Record<string, unknown> = {};
+    for (const campo of campos) {
+      if (campo in prof) out[campo] = prof[campo];
+    }
+    return out;
+  }
+
+  async buscarRedirectSlug(slugAntigo: string): Promise<string | null> {
+    const agora = new Date().toISOString();
+    const { data: redirect } = await this.supabase
+      .from('slug_redirects')
+      .select('profissional_id')
+      .eq('slug_antigo', slugAntigo)
+      .gt('expira_em', agora)
+      .maybeSingle<{ profissional_id: string }>();
+    if (!redirect) return null;
+
+    const { data: prof } = await this.supabase
+      .from('profissionais')
+      .select('slug')
+      .eq('id', redirect.profissional_id)
+      .maybeSingle<{ slug: string }>();
+    return prof?.slug ?? null;
+  }
+
+  async contarAgendamentosNoMes(profissionalId: string): Promise<number> {
+    const agora = new Date();
+    const inicio = new Date(
+      agora.getFullYear(),
+      agora.getMonth(),
+      1,
+    ).toISOString();
+    const fim = new Date(
+      agora.getFullYear(),
+      agora.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    ).toISOString();
+
+    const { count } = await this.supabase
+      .from('agendamentos')
+      .select('id', { count: 'exact', head: true })
+      .eq('profissional_id', profissionalId)
+      .in('status', ['pendente', 'confirmado', 'finalizado'])
+      .gte('data_hora', inicio)
+      .lte('data_hora', fim);
+    return count ?? 0;
+  }
+
   async atualizarPorUserId(
     userId: string,
     dto: AtualizarPerfilDto,

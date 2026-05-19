@@ -228,6 +228,36 @@ export class AgendamentosService {
     return { id };
   }
 
+  async listarConfirmadosPublico(
+    profissionalId: string,
+    de: string,
+    ate: string,
+  ): Promise<Array<{ data_hora: string }>> {
+    const { data, error } = await this.supabase
+      .from('agendamentos_publicos')
+      .select('data_hora')
+      .eq('profissional_id', profissionalId)
+      .eq('status', 'confirmado')
+      .gte('data_hora', `${de}T00:00:00`)
+      .lte('data_hora', `${ate}T23:59:59`);
+    if (error)
+      throw new InternalServerErrorException(
+        `Erro ao listar agendamentos confirmados: ${error.message}`,
+      );
+    return data ?? [];
+  }
+
+  async buscarPublicoPorId(
+    id: string,
+  ): Promise<{ id: string; servico_id: string | null } | null> {
+    const { data } = await this.supabase
+      .from('agendamentos_publicos')
+      .select('id, servico_id')
+      .eq('id', id)
+      .maybeSingle<{ id: string; servico_id: string | null }>();
+    return data ?? null;
+  }
+
   async finalizarVencidos(profissionalId: string): Promise<{ count: number }> {
     const agora = new Date().toISOString();
     const { data, error } = await this.supabase

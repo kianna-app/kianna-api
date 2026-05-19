@@ -8,6 +8,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ServicosModule } from './modules/servicos/servicos.module';
 import { DisponibilidadesModule } from './modules/disponibilidades/disponibilidades.module';
 import { BloqueiosModule } from './modules/bloqueios/bloqueios.module';
+import { BookingModule } from './modules/booking/booking.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { BloqueiosModule } from './modules/bloqueios/bloqueios.module';
     ServicosModule,
     DisponibilidadesModule,
     BloqueiosModule,
+    BookingModule,
   ],
   controllers: [AppController],
 })

@@ -50,6 +50,12 @@ export class AgendamentosController {
     return this.service.reagendar(dto.profissional_id, dto);
   }
 
+  @Get('publico/:id')
+  @ApiOperation({ summary: 'Detalhe público do agendamento (para reagendar)' })
+  detalhePublico(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.buscarPublicoPorId(id);
+  }
+
   @Patch('finalizar-vencidos')
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)

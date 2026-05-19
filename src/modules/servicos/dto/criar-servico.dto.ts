@@ -1,13 +1,15 @@
 import {
+  IsBoolean,
   IsIn,
   IsNumber,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CriarServicoDto {
   @ApiProperty({ example: 'Corte de cabelo' })
@@ -30,4 +32,9 @@ export class CriarServicoDto {
   @ApiProperty({ enum: ['presencial', 'domiciliar', 'online'] })
   @IsIn(['presencial', 'domiciliar', 'online'])
   modalidade!: 'presencial' | 'domiciliar' | 'online';
+
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  ativo?: boolean;
 }

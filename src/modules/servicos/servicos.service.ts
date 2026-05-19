@@ -66,7 +66,7 @@ export class ServicosService {
     const profId = this.requireProf(profissionalId);
     const { data, error } = await this.supabase
       .from('servicos')
-      .insert({ ...dto, profissional_id: profId, ativo: true })
+      .insert({ ativo: true, ...dto, profissional_id: profId })
       .select()
       .single<Servico>();
     if (error || !data) throw new InternalServerErrorException(error?.message);
