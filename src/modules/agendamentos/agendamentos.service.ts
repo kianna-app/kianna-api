@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   InternalServerErrorException,
   BadRequestException,
@@ -11,6 +12,7 @@ import { CriarAgendamentoDto } from './dto/criar-agendamento.dto';
 import { AgendamentoStatus } from './dto/atualizar-status.dto';
 import { ReagendarDto } from './dto/reagendar.dto';
 import { AtualizarAgendamentoDto } from './dto/atualizar-agendamento.dto';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 
 export interface Agendamento {
   id: string;
@@ -38,10 +40,27 @@ export interface AgendamentoComServico extends Agendamento {
 
 @Injectable()
 export class AgendamentosService {
+  private readonly logger = new Logger(AgendamentosService.name);
   private readonly supabase: SupabaseClient;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly notificacoes: NotificacoesService,
+  ) {
     this.supabase = createSupabaseClient(config);
+  }
+
+  /** Busca o nome do serviço (com fallback) — usado nas mensagens. */
+  private async nomeServico(
+    servicoId: string | null | undefined,
+  ): Promise<string> {
+    if (!servicoId) return 'Serviço';
+    const { data } = await this.supabase
+      .from('servicos')
+      .select('nome')
+      .eq('id', servicoId)
+      .maybeSingle<{ nome: string }>();
+    return data?.nome ?? 'Serviço';
   }
 
   async listarPorPeriodo(
@@ -65,7 +84,7 @@ export class AgendamentosService {
       throw new InternalServerErrorException(
         `Erro ao listar agendamentos: ${error.message}`,
       );
-    return (data ?? []) as unknown as AgendamentoComServico[];
+    return (data ?? []) as AgendamentoComServico[];
   }
 
   async criar(dto: CriarAgendamentoDto): Promise<Agendamento> {
@@ -79,6 +98,19 @@ export class AgendamentosService {
       throw new InternalServerErrorException(
         `Erro ao criar agendamento: ${error?.message ?? 'desconhecido'}`,
       );
+
+    // WhatsApp: avisa profissional (não bloqueia resposta)
+    void this.nomeServico(dto.servico_id)
+      .then((servico_nome) =>
+        this.notificacoes.notificarNovaSolicitacao({
+          profissional_id: dto.profissional_id,
+          cliente_nome: dto.cliente_nome,
+          servico_nome,
+          data_hora: dto.data_hora,
+        }),
+      )
+      .catch((e: unknown) => this.logErroNotificacao('nova-solicitacao', e));
+
     return data;
   }
 
@@ -113,7 +145,72 @@ export class AgendamentosService {
 
     if (error || !data)
       throw new NotFoundException('Agendamento não encontrado');
+
+    // WhatsApp: dispara notificação correspondente (sem bloquear resposta)
+    void this.dispararNotificacaoStatus(data, status, motivo_recusa);
+
     return data;
+  }
+
+  private async dispararNotificacaoStatus(
+    ag: Agendamento,
+    status: AgendamentoStatus,
+    motivo_recusa?: string,
+  ): Promise<void> {
+    try {
+      if (
+        status !== 'confirmado' &&
+        status !== 'recusado' &&
+        status !== 'cancelado' &&
+        status !== 'reagendado'
+      ) {
+        return;
+      }
+
+      const base = {
+        profissional_id: ag.profissional_id,
+        cliente_wpp: ag.cliente_wpp,
+        cliente_nome: ag.cliente_nome,
+        data_hora: ag.data_hora,
+      };
+
+      if (status === 'reagendado') {
+        // Profissional iniciou reagendamento → envia link ao cliente
+        await this.notificacoes.notificarReagendamento({
+          profissional_id: ag.profissional_id,
+          cliente_wpp: ag.cliente_wpp,
+          cliente_nome: ag.cliente_nome,
+          agendamento_id: ag.id,
+        });
+        return;
+      }
+
+      const servico_nome = await this.nomeServico(ag.servico_id);
+
+      if (status === 'confirmado') {
+        await this.notificacoes.notificarConfirmacao({ ...base, servico_nome });
+      } else if (status === 'recusado') {
+        await this.notificacoes.notificarRecusa({
+          ...base,
+          servico_nome,
+          motivo_recusa,
+        });
+      } else if (status === 'cancelado') {
+        await this.notificacoes.notificarCancelamentoProfissional({
+          ...base,
+          servico_nome,
+        });
+      }
+    } catch (e: unknown) {
+      this.logErroNotificacao(`status-${status}`, e);
+    }
+  }
+
+  private logErroNotificacao(contexto: string, e: unknown): void {
+    const msg = e instanceof Error ? e.message : String(e);
+    this.logger.error(
+      `Falha ao enviar notificação WhatsApp (${contexto}): ${msg}`,
+    );
   }
 
   async contarPendentes(profissionalUserId: string): Promise<number> {
@@ -189,6 +286,18 @@ export class AgendamentosService {
         `Erro ao criar reagendamento: ${insErr?.message ?? 'desconhecido'}`,
       );
     }
+
+    // WhatsApp: cliente concluiu reagendamento → avisa profissional (sem bloquear)
+    void this.nomeServico(dto.servico_id)
+      .then((servico_nome) =>
+        this.notificacoes.notificarNovaSolicitacao({
+          profissional_id: dto.profissional_id,
+          cliente_nome: dto.cliente_nome,
+          servico_nome,
+          data_hora: dto.data_hora,
+        }),
+      )
+      .catch((e: unknown) => this.logErroNotificacao('reagendamento-novo', e));
 
     return novo;
   }

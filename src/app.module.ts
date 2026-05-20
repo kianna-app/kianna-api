@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import appConfig from './config/app.config';
 import { AgendamentosModule } from './modules/agendamentos/agendamentos.module';
@@ -9,6 +10,10 @@ import { ServicosModule } from './modules/servicos/servicos.module';
 import { DisponibilidadesModule } from './modules/disponibilidades/disponibilidades.module';
 import { BloqueiosModule } from './modules/bloqueios/bloqueios.module';
 import { BookingModule } from './modules/booking/booking.module';
+import { ZapiModule } from './modules/zapi/zapi.module';
+import { NotificacoesModule } from './modules/notificacoes/notificacoes.module';
+import { RespostasModule } from './modules/respostas/respostas.module';
+import { LembretesModule } from './modules/lembretes/lembretes.module';
 
 @Module({
   imports: [
@@ -16,6 +21,11 @@ import { BookingModule } from './modules/booking/booking.module';
       isGlobal: true,
       load: [appConfig],
     }),
+    ScheduleModule.forRoot(),
+    ZapiModule,
+    NotificacoesModule,
+    RespostasModule,
+    LembretesModule,
     AgendamentosModule,
     ProfissionaisModule,
     WebhooksModule,
