@@ -10,6 +10,7 @@ import { ServicosModule } from './modules/servicos/servicos.module';
 import { DisponibilidadesModule } from './modules/disponibilidades/disponibilidades.module';
 import { BloqueiosModule } from './modules/bloqueios/bloqueios.module';
 import { BookingModule } from './modules/booking/booking.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { ZapiModule } from './modules/zapi/zapi.module';
 import { NotificacoesModule } from './modules/notificacoes/notificacoes.module';
 import { RespostasModule } from './modules/respostas/respostas.module';
@@ -33,6 +34,7 @@ import { LembretesModule } from './modules/lembretes/lembretes.module';
     DisponibilidadesModule,
     BloqueiosModule,
     BookingModule,
+    AdminModule,
   ],
   controllers: [AppController],
 })
