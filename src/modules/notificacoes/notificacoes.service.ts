@@ -286,4 +286,25 @@ export class NotificacoesService {
     });
     return `${dia} às ${hora}`;
   }
+  // ───── 1b. Nova solicitação → confirma recebimento ao CLIENTE ─────
+  async notificarSolicitacaoRecebidaCliente(evt: EventoCliente): Promise<void> {
+    const wpp = await this.getWppConfig(evt.profissional_id);
+    if (!wpp) return;
+
+    const data = this.formatarDataHora(evt.data_hora);
+    const msg =
+      `📩 *Solicitação recebida!*\n\n` +
+      `Olá, ${evt.cliente_nome}!\n` +
+      `Recebemos seu pedido de agendamento com ${wpp.nome}.\n\n` +
+      `💈 ${evt.servico_nome}\n` +
+      `📅 ${data}\n\n` +
+      `⏳ Aguarde a confirmação. Você receberá um aviso assim que ${wpp.nome} confirmar.`;
+
+    await this.zapi.enviarTexto(
+      wpp.wpp_instance_id,
+      wpp.wpp_token,
+      evt.cliente_wpp, // ← número do CLIENTE
+      msg,
+    );
+  }
 }

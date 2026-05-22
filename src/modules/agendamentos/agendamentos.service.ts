@@ -99,15 +99,30 @@ export class AgendamentosService {
         `Erro ao criar agendamento: ${error?.message ?? 'desconhecido'}`,
       );
 
-    // WhatsApp: avisa profissional (não bloqueia resposta)
+    // WhatsApp: avisa profissional e cliente em paralelo (não bloqueia resposta)
     void this.nomeServico(dto.servico_id)
       .then((servico_nome) =>
-        this.notificacoes.notificarNovaSolicitacao({
-          profissional_id: dto.profissional_id,
-          cliente_nome: dto.cliente_nome,
-          servico_nome,
-          data_hora: dto.data_hora,
-        }),
+        Promise.allSettled([
+          this.notificacoes.notificarNovaSolicitacao({
+            profissional_id: dto.profissional_id,
+            cliente_nome: dto.cliente_nome,
+            servico_nome,
+            data_hora: dto.data_hora,
+          }),
+          this.notificacoes.notificarSolicitacaoRecebidaCliente({
+            profissional_id: dto.profissional_id,
+            cliente_nome: dto.cliente_nome,
+            cliente_wpp: dto.cliente_wpp,
+            servico_nome,
+            data_hora: dto.data_hora,
+          }),
+        ]).then((resultados) =>
+          resultados
+            .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+            .forEach((r) =>
+              this.logErroNotificacao('nova-solicitacao', r.reason),
+            ),
+        ),
       )
       .catch((e: unknown) => this.logErroNotificacao('nova-solicitacao', e));
 
