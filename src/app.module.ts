@@ -15,6 +15,9 @@ import { ZapiModule } from './modules/zapi/zapi.module';
 import { NotificacoesModule } from './modules/notificacoes/notificacoes.module';
 import { RespostasModule } from './modules/respostas/respostas.module';
 import { LembretesModule } from './modules/lembretes/lembretes.module';
+import { PlanosModule } from './modules/planos/planos.module';
+import { AvisosModule } from './modules/avisos/avisos.module';
+import { RelatorioModule } from './modules/relatorio/relatorio.module';
 
 @Module({
   imports: [
@@ -35,6 +38,9 @@ import { LembretesModule } from './modules/lembretes/lembretes.module';
     BloqueiosModule,
     BookingModule,
     AdminModule,
+    PlanosModule,
+    AvisosModule,
+    RelatorioModule,
   ],
   controllers: [AppController],
 })

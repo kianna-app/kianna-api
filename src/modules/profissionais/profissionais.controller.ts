@@ -1,7 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
+  Logger,
   Param,
   Patch,
   UnauthorizedException,
@@ -16,6 +20,8 @@ import { AtualizarPerfilDto } from './dto/atualizar-perfil.dto';
 @ApiTags('profissionais')
 @Controller('api/profissionais')
 export class ProfissionaisController {
+  private readonly logger = new Logger(ProfissionaisController.name);
+
   constructor(private readonly service: ProfissionaisService) {}
 
   @Get('me')
@@ -37,6 +43,17 @@ export class ProfissionaisController {
   ) {
     if (!userId) throw new UnauthorizedException();
     return this.service.atualizarPorUserId(userId, dto);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @UseGuards(SupabaseAuthGuard)
+  @ApiOperation({ summary: 'Desativar (soft-delete) conta do profissional logado' })
+  async excluirMe(@CurrentUser('id') userId: string | undefined): Promise<void> {
+    if (!userId) throw new UnauthorizedException();
+    await this.service.desativarPorUserId(userId);
+    this.logger.log(`Conta desativada (soft-delete) | user_id=${userId}`);
   }
 
   @Get(':slug')
