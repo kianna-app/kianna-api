@@ -116,6 +116,6 @@ export class ServicosService {
       .eq('ativo', true)
       .order('created_at', { ascending: true });
     if (error) throw new InternalServerErrorException(error.message);
-    return (data ?? []) as Partial<Servico>[];
+    return data ?? [];
   }
 }

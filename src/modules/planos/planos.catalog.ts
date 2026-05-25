@@ -19,9 +19,27 @@ export interface PlanoBackend {
 }
 
 export const PLANOS_BACKEND: PlanoBackend[] = [
-  { id: 'gratis', nome: 'Essencial', preco: 49,  precoLabel: 'R$ 49/mês',  resumo: 'Agenda e página pública.' },
-  { id: 'pro',    nome: 'Pro',       preco: 179, precoLabel: 'R$ 179/mês', resumo: 'Tudo + WhatsApp completo.' },
-  { id: 'studio', nome: 'Studio',    preco: 299, precoLabel: 'R$ 299/mês', resumo: 'Pro + múltiplos profissionais.' },
+  {
+    id: 'gratis',
+    nome: 'Essencial',
+    preco: 49,
+    precoLabel: 'R$ 49/mês',
+    resumo: 'Agenda e página pública.',
+  },
+  {
+    id: 'pro',
+    nome: 'Pro',
+    preco: 179,
+    precoLabel: 'R$ 179/mês',
+    resumo: 'Tudo + WhatsApp completo.',
+  },
+  {
+    id: 'studio',
+    nome: 'Studio',
+    preco: 299,
+    precoLabel: 'R$ 299/mês',
+    resumo: 'Pro + múltiplos profissionais.',
+  },
 ];
 
 export const PLANO_IDS: PlanoId[] = ['gratis', 'pro', 'studio'];

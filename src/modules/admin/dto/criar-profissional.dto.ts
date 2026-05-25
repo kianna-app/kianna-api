@@ -20,7 +20,9 @@ export class CriarProfissionalDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ description: 'Slug em minúsculas, sem espaços/acentos, com hífens' })
+  @ApiProperty({
+    description: 'Slug em minúsculas, sem espaços/acentos, com hífens',
+  })
   @IsString()
   @MinLength(3)
   @MaxLength(60)

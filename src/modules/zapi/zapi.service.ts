@@ -1,19 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-
-export interface ZapiBotao {
-  id: string;
-  label: string;
-}
-
-export interface ZapiStatus {
-  connected: boolean;
-  raw?: unknown;
-}
+import {
+  SendButtonMessageParams,
+  SendTextMessageParams,
+  WhatsappCredentials,
+  WhatsappProvider,
+  WhatsappStatus,
+} from './whatsapp-provider.interface';
 
 @Injectable()
-export class ZapiService {
+export class ZapiService implements WhatsappProvider {
   private readonly logger = new Logger(ZapiService.name);
   private readonly baseUrl: string;
   private readonly clientToken: string | undefined;
@@ -29,25 +26,21 @@ export class ZapiService {
     return this.clientToken ? { 'Client-Token': this.clientToken } : {};
   }
 
-  private url(instanceId: string, instanceToken: string, path: string): string {
-    return `${this.baseUrl}/instances/${instanceId}/token/${instanceToken}${path}`;
+  private url(creds: WhatsappCredentials, path: string): string {
+    return `${this.baseUrl}/instances/${creds.instanceRef}/token/${creds.authToken}${path}`;
   }
 
-  /** Envia mensagem de texto. Retorna true em caso de sucesso. */
-  async enviarTexto(
-    instanceId: string,
-    instanceToken: string,
-    telefone: string,
-    mensagem: string,
-  ): Promise<boolean> {
+  async sendTextMessage(params: SendTextMessageParams): Promise<boolean> {
     try {
-      const phone = this.formatarTelefone(telefone);
+      const phone = this.formatarTelefone(params.phone);
       await axios.post(
-        this.url(instanceId, instanceToken, '/send-text'),
-        { phone, message: mensagem },
+        this.url(params.credentials, '/send-text'),
+        { phone, message: params.message },
         { headers: this.headers(), timeout: 15000 },
       );
-      this.logger.log(`Texto enviado para ${phone} (instance=${instanceId})`);
+      this.logger.log(
+        `Texto enviado para ${phone} (instance=${params.credentials.instanceRef})`,
+      );
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -61,22 +54,16 @@ export class ZapiService {
    * (A Z-API tem variações na rota de botões dependendo do plano — em caso
    * de erro, o cliente ainda consegue responder "1" ou "2" no texto.)
    */
-  async enviarBotoes(
-    instanceId: string,
-    instanceToken: string,
-    telefone: string,
-    mensagem: string,
-    botoes: ZapiBotao[],
-  ): Promise<boolean> {
+  async sendButtonMessage(params: SendButtonMessageParams): Promise<boolean> {
     try {
-      const phone = this.formatarTelefone(telefone);
+      const phone = this.formatarTelefone(params.phone);
       await axios.post(
-        this.url(instanceId, instanceToken, '/send-button-list'),
+        this.url(params.credentials, '/send-button-list'),
         {
           phone,
-          message: mensagem,
+          message: params.message,
           buttonList: {
-            buttons: botoes.map((b) => ({ id: b.id, label: b.label })),
+            buttons: params.buttons.map((b) => ({ id: b.id, label: b.label })),
           },
         },
         { headers: this.headers(), timeout: 15000 },
@@ -86,24 +73,22 @@ export class ZapiService {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.warn(`Botões falharam, fallback p/ texto: ${msg}`);
-      const opts = botoes.map((b) => b.label).join('\n');
-      return this.enviarTexto(
-        instanceId,
-        instanceToken,
-        telefone,
-        `${mensagem}\n\n${opts}`,
-      );
+      const opts = params.buttons.map((b) => b.label).join('\n');
+      return this.sendTextMessage({
+        credentials: params.credentials,
+        phone: params.phone,
+        message: `${params.message}\n\n${opts}`,
+      });
     }
   }
 
   /** Retorna QR Code em base64 (sem o prefixo data:image/...). */
-  async gerarQrCode(
-    instanceId: string,
-    instanceToken: string,
+  async getConnectionQrCode(
+    creds: WhatsappCredentials,
   ): Promise<string | null> {
     try {
       const { data } = await axios.get<{ value?: string }>(
-        this.url(instanceId, instanceToken, '/qr-code/image'),
+        this.url(creds, '/qr-code/image'),
         { headers: this.headers(), timeout: 15000 },
       );
       return data?.value ?? null;
@@ -115,13 +100,12 @@ export class ZapiService {
   }
 
   /** Verifica status de conexão. */
-  async verificarStatus(
-    instanceId: string,
-    instanceToken: string,
-  ): Promise<ZapiStatus> {
+  async getConnectionStatus(
+    creds: WhatsappCredentials,
+  ): Promise<WhatsappStatus> {
     try {
       const { data } = await axios.get<{ connected?: boolean }>(
-        this.url(instanceId, instanceToken, '/status'),
+        this.url(creds, '/status'),
         { headers: this.headers(), timeout: 15000 },
       );
       return { connected: !!data?.connected, raw: data };
@@ -133,12 +117,9 @@ export class ZapiService {
   }
 
   /** Desconecta a instância. */
-  async desconectar(
-    instanceId: string,
-    instanceToken: string,
-  ): Promise<boolean> {
+  async disconnect(creds: WhatsappCredentials): Promise<boolean> {
     try {
-      await axios.get(this.url(instanceId, instanceToken, '/disconnect'), {
+      await axios.get(this.url(creds, '/disconnect'), {
         headers: this.headers(),
         timeout: 15000,
       });

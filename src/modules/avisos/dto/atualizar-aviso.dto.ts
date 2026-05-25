@@ -14,24 +14,35 @@ import {
 
 export class AtualizarAvisoDto {
   @ApiPropertyOptional()
-  @IsOptional() @IsString() @MinLength(1) @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
   titulo?: string;
 
   @ApiPropertyOptional()
-  @IsOptional() @IsString() @MinLength(1) @MaxLength(5000)
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
   corpo?: string;
 
   @ApiPropertyOptional()
-  @IsOptional() @IsDateString()
+  @IsOptional()
+  @IsDateString()
   publicar_em?: string;
 
   @ApiPropertyOptional({ enum: ['todos', 'selecionados'] })
-  @IsOptional() @IsString() @IsIn(['todos', 'selecionados'])
+  @IsOptional()
+  @IsString()
+  @IsIn(['todos', 'selecionados'])
   destino?: 'todos' | 'selecionados';
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
-  @IsArray() @ArrayMaxSize(500) @ArrayUnique()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ArrayUnique()
   @IsUUID('4', { each: true })
   destinatarios?: string[];
 }

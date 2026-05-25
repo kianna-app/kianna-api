@@ -77,7 +77,9 @@ export class AvisosController {
 
   @Get()
   @ApiOperation({ summary: 'Meus avisos publicados (com status de leitura)' })
-  meusAvisos(@CurrentUser('profissional_id') profissionalId: string | undefined) {
+  meusAvisos(
+    @CurrentUser('profissional_id') profissionalId: string | undefined,
+  ) {
     if (!profissionalId) throw new UnauthorizedException();
     return this.service.listarParaProfissional(profissionalId);
   }

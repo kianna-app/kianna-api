@@ -20,7 +20,9 @@ export class PlanosController {
   @Get()
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)
-  @ApiOperation({ summary: 'Lista planos disponíveis + plano atual do profissional' })
+  @ApiOperation({
+    summary: 'Lista planos disponíveis + plano atual do profissional',
+  })
   catalogo(@CurrentUser('id') userId: string | undefined) {
     if (!userId) throw new UnauthorizedException();
     return this.service.catalogo(userId);
@@ -29,7 +31,9 @@ export class PlanosController {
   @Post('upgrade')
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)
-  @ApiOperation({ summary: 'Registra intenção de upgrade (stub — pagamento futuro)' })
+  @ApiOperation({
+    summary: 'Registra intenção de upgrade (stub — pagamento futuro)',
+  })
   iniciarUpgrade(
     @CurrentUser('id') userId: string | undefined,
     @Body() dto: IniciarUpgradeDto,

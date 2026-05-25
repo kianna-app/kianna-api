@@ -59,11 +59,7 @@ export class BloqueiosService {
         'Informe hora_inicio E hora_fim, ou nenhum dos dois.',
       );
     }
-    if (
-      dto.hora_inicio &&
-      dto.hora_fim &&
-      dto.hora_fim <= dto.hora_inicio
-    ) {
+    if (dto.hora_inicio && dto.hora_fim && dto.hora_fim <= dto.hora_inicio) {
       throw new BadRequestException(
         'hora_fim deve ser posterior a hora_inicio.',
       );
@@ -100,6 +96,6 @@ export class BloqueiosService {
       .gte('data', dataInicio)
       .lte('data', dataFim);
     if (error) throw new InternalServerErrorException(error.message);
-    return (data ?? []) as Partial<Bloqueio>[];
+    return data ?? [];
   }
 }

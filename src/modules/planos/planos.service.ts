@@ -37,7 +37,10 @@ export class PlanosService {
    *   4. Retornar { url } para o front redirecionar.
    *   5. Atualizar profissionais.plano via webhook `checkout.session.completed`.
    */
-  async iniciarUpgrade(userId: string, planoId: PlanoId): Promise<UpgradeStubResponse> {
+  async iniciarUpgrade(
+    userId: string,
+    planoId: PlanoId,
+  ): Promise<UpgradeStubResponse> {
     const prof = await this.profissionais.porUserId(userId);
     if (!prof) throw new NotFoundException('Profissional não encontrado');
 

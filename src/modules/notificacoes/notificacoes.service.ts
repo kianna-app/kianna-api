@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseClient } from '../../config/supabase.config';
-import { ZapiService } from '../zapi/zapi.service';
+import { WHATSAPP_PROVIDER } from '../zapi/whatsapp-provider.interface';
+import type {
+  WhatsappCredentials,
+  WhatsappProvider,
+} from '../zapi/whatsapp-provider.interface';
 import { WppStatus } from '../../common/constants/lembrete.constants';
 
 interface WppConfig {
@@ -54,11 +58,16 @@ export class NotificacoesService {
   private readonly appUrl: string;
 
   constructor(
-    private readonly zapi: ZapiService,
+    @Inject(WHATSAPP_PROVIDER)
+    private readonly whatsapp: WhatsappProvider,
     private readonly config: ConfigService,
   ) {
     this.supabase = createSupabaseClient(config);
     this.appUrl = this.config.get<string>('APP_URL') ?? APP_URL_DEFAULT;
+  }
+
+  private credsOf(wpp: WppConfig): WhatsappCredentials {
+    return { instanceRef: wpp.wpp_instance_id, authToken: wpp.wpp_token };
   }
 
   /** Busca a configuração WhatsApp do profissional. Retorna null se não estiver pronto. */
@@ -103,12 +112,11 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Acesse o painel para confirmar ou recusar.`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      wpp.whatsapp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: wpp.whatsapp,
+      message: msg,
+    });
   }
 
   // ───── 2. Confirmado → notifica cliente ─────
@@ -125,12 +133,11 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Até lá! 😊`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp,
+      message: msg,
+    });
   }
 
   // ───── 3. Recusado → notifica cliente ─────
@@ -152,12 +159,11 @@ export class NotificacoesService {
 
     msg += `\n\nVocê pode solicitar um novo horário em ${this.appUrl}/${wpp.slug}`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp,
+      message: msg,
+    });
   }
 
   // ───── 4. Cancelado pelo profissional → notifica cliente ─────
@@ -174,12 +180,11 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Você pode solicitar um novo horário em ${this.appUrl}/${wpp.slug}`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp,
+      message: msg,
+    });
   }
 
   // ───── 5. Reagendamento iniciado pelo profissional → envia link ao cliente ─────
@@ -194,12 +199,11 @@ export class NotificacoesService {
       `${wpp.nome} precisa reagendar seu atendimento.\n\n` +
       `Clique no link para escolher um novo horário:\n${link}`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp,
+      message: msg,
+    });
   }
 
   // ───── 6. Cancelamento pelo cliente → notifica profissional ─────
@@ -217,12 +221,11 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `O horário foi liberado na sua agenda.`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      wpp.whatsapp,
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: wpp.whatsapp,
+      message: msg,
+    });
   }
 
   // ───── 7. Lembrete antes do atendimento (usado pelo cron — PR4) ─────
@@ -241,16 +244,15 @@ export class NotificacoesService {
         `📅 ${data}\n\n` +
         `Confirme sua presença:`;
 
-      return this.zapi.enviarBotoes(
-        wpp.wpp_instance_id,
-        wpp.wpp_token,
-        evt.cliente_wpp,
-        msg,
-        [
+      return this.whatsapp.sendButtonMessage({
+        credentials: this.credsOf(wpp),
+        phone: evt.cliente_wpp,
+        message: msg,
+        buttons: [
           { id: 'confirmar_presenca', label: '1 - Confirmar presença' },
           { id: 'cancelar_agendamento', label: '2 - Cancelar' },
         ],
-      );
+      });
     }
 
     const msg =
@@ -261,12 +263,11 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Até lá! 😊`;
 
-    return this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp,
-      msg,
-    );
+    return this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp,
+      message: msg,
+    });
   }
 
   /** Formata ISO → "segunda-feira, 19/05/2026 às 14:30" (timezone Brasília). */
@@ -300,11 +301,10 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `⏳ Aguarde a confirmação. Você receberá um aviso assim que ${wpp.nome} confirmar.`;
 
-    await this.zapi.enviarTexto(
-      wpp.wpp_instance_id,
-      wpp.wpp_token,
-      evt.cliente_wpp, // ← número do CLIENTE
-      msg,
-    );
+    await this.whatsapp.sendTextMessage({
+      credentials: this.credsOf(wpp),
+      phone: evt.cliente_wpp, // ← número do CLIENTE
+      message: msg,
+    });
   }
 }

@@ -49,8 +49,12 @@ export class ProfissionaisController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)
-  @ApiOperation({ summary: 'Desativar (soft-delete) conta do profissional logado' })
-  async excluirMe(@CurrentUser('id') userId: string | undefined): Promise<void> {
+  @ApiOperation({
+    summary: 'Desativar (soft-delete) conta do profissional logado',
+  })
+  async excluirMe(
+    @CurrentUser('id') userId: string | undefined,
+  ): Promise<void> {
     if (!userId) throw new UnauthorizedException();
     await this.service.desativarPorUserId(userId);
     this.logger.log(`Conta desativada (soft-delete) | user_id=${userId}`);

@@ -34,7 +34,8 @@ export class AgendamentosController {
     @Query('inicio') inicio?: string,
     @Query('fim') fim?: string,
   ) {
-    if (!profissionalId) throw new UnauthorizedException('Profissional não vinculado');
+    if (!profissionalId)
+      throw new UnauthorizedException('Profissional não vinculado');
     return this.service.listarPorPeriodo(profissionalId, inicio, fim);
   }
 
@@ -45,7 +46,9 @@ export class AgendamentosController {
   }
 
   @Post('reagendar')
-  @ApiOperation({ summary: 'Reagendar (público — atualiza original e cria novo)' })
+  @ApiOperation({
+    summary: 'Reagendar (público — atualiza original e cria novo)',
+  })
   reagendar(@Body() dto: ReagendarDto) {
     return this.service.reagendar(dto.profissional_id, dto);
   }
@@ -60,12 +63,14 @@ export class AgendamentosController {
   @ApiBearerAuth()
   @UseGuards(SupabaseAuthGuard)
   @ApiOperation({
-    summary: 'Marcar agendamentos confirmados com data passada como finalizados',
+    summary:
+      'Marcar agendamentos confirmados com data passada como finalizados',
   })
   finalizarVencidos(
     @CurrentUser('profissional_id') profissionalId: string | undefined,
   ) {
-    if (!profissionalId) throw new UnauthorizedException('Profissional não vinculado');
+    if (!profissionalId)
+      throw new UnauthorizedException('Profissional não vinculado');
     return this.service.finalizarVencidos(profissionalId);
   }
 
@@ -105,7 +110,8 @@ export class AgendamentosController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarAgendamentoDto,
   ) {
-    if (!profissionalId) throw new UnauthorizedException('Profissional não vinculado');
+    if (!profissionalId)
+      throw new UnauthorizedException('Profissional não vinculado');
     return this.service.atualizar(profissionalId, id, dto);
   }
 
@@ -117,7 +123,8 @@ export class AgendamentosController {
     @CurrentUser('profissional_id') profissionalId: string | undefined,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    if (!profissionalId) throw new UnauthorizedException('Profissional não vinculado');
+    if (!profissionalId)
+      throw new UnauthorizedException('Profissional não vinculado');
     return this.service.excluir(profissionalId, id);
   }
 }

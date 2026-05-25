@@ -58,7 +58,10 @@ export class AvisosService {
   // ─────────────────────────────────────────────────────────
 
   async criar(dto: CriarAvisoDto, criadoPor: string): Promise<Aviso> {
-    if (dto.destino === 'selecionados' && (!dto.destinatarios || dto.destinatarios.length === 0)) {
+    if (
+      dto.destino === 'selecionados' &&
+      (!dto.destinatarios || dto.destinatarios.length === 0)
+    ) {
       throw new BadRequestException(
         'Quando destino=selecionados é obrigatório informar destinatarios.',
       );
@@ -85,7 +88,7 @@ export class AvisosService {
     }
 
     if (dto.destino === 'selecionados' && dto.destinatarios?.length) {
-      const rows = dto.destinatarios.map(pid => ({
+      const rows = dto.destinatarios.map((pid) => ({
         aviso_id: data.id,
         profissional_id: pid,
       }));
@@ -149,7 +152,7 @@ export class AvisosService {
             'destinatarios obrigatório quando destino=selecionados.',
           );
         }
-        const rows = dto.destinatarios.map(pid => ({
+        const rows = dto.destinatarios.map((pid) => ({
           aviso_id: id,
           profissional_id: pid,
         }));
@@ -191,12 +194,14 @@ export class AvisosService {
       .order('criado_em', { ascending: false });
 
     if (error) {
-      throw new InternalServerErrorException(`Erro ao listar avisos: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Erro ao listar avisos: ${error.message}`,
+      );
     }
 
     if (!avisos || avisos.length === 0) return [];
 
-    const ids = (avisos as Aviso[]).map(a => a.id);
+    const ids = (avisos as Aviso[]).map((a) => a.id);
 
     // Destinatários explícitos por aviso
     const { data: destLinks } = await this.supabase
@@ -204,7 +209,10 @@ export class AvisosService {
       .select('aviso_id, profissional_id')
       .in('aviso_id', ids);
     const destinatariosPorAviso = new Map<string, string[]>();
-    for (const row of (destLinks ?? []) as { aviso_id: string; profissional_id: string }[]) {
+    for (const row of (destLinks ?? []) as {
+      aviso_id: string;
+      profissional_id: string;
+    }[]) {
       const arr = destinatariosPorAviso.get(row.aviso_id) ?? [];
       arr.push(row.profissional_id);
       destinatariosPorAviso.set(row.aviso_id, arr);
@@ -223,17 +231,21 @@ export class AvisosService {
       .in('aviso_id', ids);
     const leiturasPorAviso = new Map<string, number>();
     for (const row of (leituraLinks ?? []) as { aviso_id: string }[]) {
-      leiturasPorAviso.set(row.aviso_id, (leiturasPorAviso.get(row.aviso_id) ?? 0) + 1);
+      leiturasPorAviso.set(
+        row.aviso_id,
+        (leiturasPorAviso.get(row.aviso_id) ?? 0) + 1,
+      );
     }
 
     const agora = Date.now();
-    return (avisos as Aviso[]).map(a => {
+    return (avisos as Aviso[]).map((a) => {
       const destinatarios = destinatariosPorAviso.get(a.id) ?? [];
       const total_destinatarios =
         a.destino === 'todos' ? (totalAtivos ?? 0) : destinatarios.length;
       return {
         ...a,
-        estado: new Date(a.publicar_em).getTime() <= agora ? 'publicada' : 'agendada',
+        estado:
+          new Date(a.publicar_em).getTime() <= agora ? 'publicada' : 'agendada',
         destinatarios,
         total_destinatarios,
         total_leituras: leiturasPorAviso.get(a.id) ?? 0,
@@ -251,14 +263,14 @@ export class AvisosService {
         .select('id')
         .eq('ativo', true);
       if (error) throw new InternalServerErrorException(error.message);
-      profissionaisIds = (data ?? []).map(r => r.id as string);
+      profissionaisIds = (data ?? []).map((r) => r.id as string);
     } else {
       const { data, error } = await this.supabase
         .from('avisos_destinatarios')
         .select('profissional_id')
         .eq('aviso_id', id);
       if (error) throw new InternalServerErrorException(error.message);
-      profissionaisIds = (data ?? []).map(r => r.profissional_id as string);
+      profissionaisIds = (data ?? []).map((r) => r.profissional_id as string);
     }
 
     if (profissionaisIds.length === 0) return [];
@@ -275,11 +287,14 @@ export class AvisosService {
     ]);
 
     const lidoMap = new Map<string, string>();
-    for (const r of (leituras ?? []) as { profissional_id: string; lida_em: string }[]) {
+    for (const r of (leituras ?? []) as {
+      profissional_id: string;
+      lida_em: string;
+    }[]) {
       lidoMap.set(r.profissional_id, r.lida_em);
     }
 
-    return ((profs ?? []) as { id: string; nome: string }[]).map(p => ({
+    return ((profs ?? []) as { id: string; nome: string }[]).map((p) => ({
       profissional_id: p.id,
       nome: p.nome,
       lida_em: lidoMap.get(p.id) ?? null,
@@ -290,7 +305,9 @@ export class AvisosService {
   //  PROFISSIONAL
   // ─────────────────────────────────────────────────────────
 
-  async listarParaProfissional(profissionalId: string): Promise<AvisoParaProfissional[]> {
+  async listarParaProfissional(
+    profissionalId: string,
+  ): Promise<AvisoParaProfissional[]> {
     const agora = new Date().toISOString();
 
     // Pega todos os avisos publicados (não excluídos, publicar_em <= agora)
@@ -305,18 +322,20 @@ export class AvisosService {
     if (!candidatos || candidatos.length === 0) return [];
 
     // Avisos com destino=selecionados que incluem este profissional
-    const idsCandidatos = (candidatos as Array<{ id: string }>).map(c => c.id);
+    const idsCandidatos = (candidatos as Array<{ id: string }>).map(
+      (c) => c.id,
+    );
     const { data: destLinks } = await this.supabase
       .from('avisos_destinatarios')
       .select('aviso_id')
       .eq('profissional_id', profissionalId)
       .in('aviso_id', idsCandidatos);
     const selecionadosParaMim = new Set(
-      ((destLinks ?? []) as Array<{ aviso_id: string }>).map(d => d.aviso_id),
+      ((destLinks ?? []) as Array<{ aviso_id: string }>).map((d) => d.aviso_id),
     );
 
-    const aplicaveis = (candidatos as Array<Aviso>).filter(a =>
-      a.destino === 'todos' || selecionadosParaMim.has(a.id),
+    const aplicaveis = (candidatos as Array<Aviso>).filter(
+      (a) => a.destino === 'todos' || selecionadosParaMim.has(a.id),
     );
     if (aplicaveis.length === 0) return [];
 
@@ -324,13 +343,19 @@ export class AvisosService {
       .from('avisos_leituras')
       .select('aviso_id, lida_em')
       .eq('profissional_id', profissionalId)
-      .in('aviso_id', aplicaveis.map(a => a.id));
+      .in(
+        'aviso_id',
+        aplicaveis.map((a) => a.id),
+      );
     const lidoMap = new Map<string, string>();
-    for (const r of (minhasLeituras ?? []) as { aviso_id: string; lida_em: string }[]) {
+    for (const r of (minhasLeituras ?? []) as {
+      aviso_id: string;
+      lida_em: string;
+    }[]) {
       lidoMap.set(r.aviso_id, r.lida_em);
     }
 
-    return aplicaveis.map(a => ({
+    return aplicaveis.map((a) => ({
       id: a.id,
       titulo: a.titulo,
       corpo: a.corpo,
@@ -357,14 +382,18 @@ export class AvisosService {
       if (!link) throw new NotFoundException('Aviso não destinado a você.');
     }
 
-    const { error } = await this.supabase
-      .from('avisos_leituras')
-      .upsert(
-        { aviso_id: avisoId, profissional_id: profissionalId, lida_em: new Date().toISOString() },
-        { onConflict: 'aviso_id,profissional_id' },
-      );
+    const { error } = await this.supabase.from('avisos_leituras').upsert(
+      {
+        aviso_id: avisoId,
+        profissional_id: profissionalId,
+        lida_em: new Date().toISOString(),
+      },
+      { onConflict: 'aviso_id,profissional_id' },
+    );
     if (error) {
-      throw new InternalServerErrorException(`Erro ao marcar leitura: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Erro ao marcar leitura: ${error.message}`,
+      );
     }
   }
 

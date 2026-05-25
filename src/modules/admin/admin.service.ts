@@ -38,7 +38,10 @@ export class AdminService {
   }
 
   async listarProfissionais(incluirInativos = false) {
-    let query = this.supabase.from('profissionais').select(SELECT_COLUNAS).order('nome');
+    let query = this.supabase
+      .from('profissionais')
+      .select(SELECT_COLUNAS)
+      .order('nome');
 
     if (!incluirInativos) {
       query = query.eq('ativo', true);
@@ -69,11 +72,15 @@ export class AdminService {
       .eq('id', id)
       .single<ProfissionalRow>();
 
-    if (error || !data) throw new NotFoundException('Profissional não encontrado');
+    if (error || !data)
+      throw new NotFoundException('Profissional não encontrado');
     return data;
   }
 
-  async atualizarWhatsapp(id: string, dto: UpdateWhatsappDto): Promise<{ ok: true }> {
+  async atualizarWhatsapp(
+    id: string,
+    dto: UpdateWhatsappDto,
+  ): Promise<{ ok: true }> {
     const { error } = await this.supabase
       .from('profissionais')
       .update({
@@ -171,7 +178,9 @@ export class AdminService {
           'O schema atual exige user_id. Implemente o fluxo de convite do profissional antes (ver TODO em admin.service).',
         );
       }
-      throw new InternalServerErrorException(`Erro ao criar profissional: ${msg}`);
+      throw new InternalServerErrorException(
+        `Erro ao criar profissional: ${msg}`,
+      );
     }
 
     return data;

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  Inject,
   Logger,
   NotFoundException,
   Post,
@@ -15,7 +16,11 @@ import { createSupabaseClient } from '../../config/supabase.config';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { WppStatus } from '../../common/constants/lembrete.constants';
-import { ZapiService } from './zapi.service';
+import { WHATSAPP_PROVIDER } from './whatsapp-provider.interface';
+import type {
+  WhatsappCredentials,
+  WhatsappProvider,
+} from './whatsapp-provider.interface';
 
 interface ProfWppRow {
   id: string;
@@ -31,7 +36,8 @@ export class ZapiController {
   private readonly supabase: SupabaseClient;
 
   constructor(
-    private readonly zapi: ZapiService,
+    @Inject(WHATSAPP_PROVIDER)
+    private readonly whatsapp: WhatsappProvider,
     config: ConfigService,
   ) {
     this.supabase = createSupabaseClient(config);
@@ -45,10 +51,7 @@ export class ZapiController {
     @CurrentUser('profissional_id') profissionalId: string | undefined,
   ): Promise<{ qrCode: string }> {
     const prof = await this.requireProf(profissionalId);
-    const qrCode = await this.zapi.gerarQrCode(
-      prof.wpp_instance_id!,
-      prof.wpp_token!,
-    );
+    const qrCode = await this.whatsapp.getConnectionQrCode(this.creds(prof));
     if (!qrCode) {
       throw new BadRequestException(
         'Não foi possível gerar o QR Code. Verifique o Instance ID e Token.',
@@ -66,10 +69,7 @@ export class ZapiController {
     @CurrentUser('profissional_id') profissionalId: string | undefined,
   ): Promise<{ status: WppStatus }> {
     const prof = await this.requireProf(profissionalId);
-    const r = await this.zapi.verificarStatus(
-      prof.wpp_instance_id!,
-      prof.wpp_token!,
-    );
+    const r = await this.whatsapp.getConnectionStatus(this.creds(prof));
     const novoStatus: WppStatus = r.connected ? 'conectado' : 'desconectado';
     if (novoStatus !== prof.wpp_status) {
       await this.atualizarStatus(prof.id, novoStatus);
@@ -85,9 +85,16 @@ export class ZapiController {
     @CurrentUser('profissional_id') profissionalId: string | undefined,
   ): Promise<{ status: WppStatus }> {
     const prof = await this.requireProf(profissionalId);
-    await this.zapi.desconectar(prof.wpp_instance_id!, prof.wpp_token!);
+    await this.whatsapp.disconnect(this.creds(prof));
     await this.atualizarStatus(prof.id, 'desconectado');
     return { status: 'desconectado' };
+  }
+
+  private creds(prof: ProfWppRow): WhatsappCredentials {
+    return {
+      instanceRef: prof.wpp_instance_id!,
+      authToken: prof.wpp_token!,
+    };
   }
 
   private async requireProf(

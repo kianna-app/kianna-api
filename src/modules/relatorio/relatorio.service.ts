@@ -52,8 +52,10 @@ export class RelatorioService {
       throw new BadRequestException('Mês inválido (use 1-12)');
     }
 
-    const inicio = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0, 0)).toISOString();
-    const fim    = new Date(Date.UTC(ano, mes, 1, 0, 0, 0, 0)).toISOString();
+    const inicio = new Date(
+      Date.UTC(ano, mes - 1, 1, 0, 0, 0, 0),
+    ).toISOString();
+    const fim = new Date(Date.UTC(ano, mes, 1, 0, 0, 0, 0)).toISOString();
 
     const { data, error } = await this.supabase.rpc('relatorio_agendamentos', {
       p_profissional_id: profissionalId,

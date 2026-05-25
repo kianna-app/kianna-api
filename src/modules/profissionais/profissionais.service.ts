@@ -69,7 +69,8 @@ export class ProfissionaisService {
     if (error || !data)
       throw new NotFoundException('Profissional não encontrado');
 
-    const { data: authData } = await this.supabase.auth.admin.getUserById(userId);
+    const { data: authData } =
+      await this.supabase.auth.admin.getUserById(userId);
     if (authData?.user?.email) {
       (data as Profissional & { email?: string }).email = authData.user.email;
     }

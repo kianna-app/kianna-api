@@ -33,7 +33,9 @@ export class AdminController {
   }
 
   @Get('profissionais/:id')
-  @ApiOperation({ summary: 'Buscar profissional por ID com credenciais completas (admin)' })
+  @ApiOperation({
+    summary: 'Buscar profissional por ID com credenciais completas (admin)',
+  })
   buscar(@Param('id') id: string) {
     return this.service.buscarProfissional(id);
   }
@@ -54,11 +56,10 @@ export class AdminController {
   }
 
   @Put('profissionais/:id/whatsapp')
-  @ApiOperation({ summary: 'Atualizar credenciais Z-API do profissional (admin)' })
-  atualizarWhatsapp(
-    @Param('id') id: string,
-    @Body() dto: UpdateWhatsappDto,
-  ) {
+  @ApiOperation({
+    summary: 'Atualizar credenciais Z-API do profissional (admin)',
+  })
+  atualizarWhatsapp(@Param('id') id: string, @Body() dto: UpdateWhatsappDto) {
     return this.service.atualizarWhatsapp(id, dto);
   }
 

@@ -98,6 +98,6 @@ export class DisponibilidadesService {
       .order('dia_semana')
       .order('hora_inicio');
     if (error) throw new InternalServerErrorException(error.message);
-    return (data ?? []) as Partial<Disponibilidade>[];
+    return data ?? [];
   }
 }
