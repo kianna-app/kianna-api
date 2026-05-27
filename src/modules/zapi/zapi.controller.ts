@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   Logger,
@@ -21,6 +22,8 @@ import type {
   WhatsappCredentials,
   WhatsappProvider,
 } from './whatsapp-provider.interface';
+import { PLAN_LIMITS } from '../../common/constants/plan.limits';
+import { PlanoId } from '../planos/planos.catalog';
 
 interface ProfWppRow {
   id: string;
@@ -49,7 +52,9 @@ export class ZapiController {
   @ApiOperation({ summary: 'Gerar QR Code para conectar WhatsApp' })
   async qrCode(
     @CurrentUser('profissional_id') profissionalId: string | undefined,
+    @CurrentUser('plano') plano: string | undefined,
   ): Promise<{ qrCode: string }> {
+    this.requireWhatsappAccess(plano);
     const prof = await this.requireProf(profissionalId);
     const qrCode = await this.whatsapp.getConnectionQrCode(this.creds(prof));
     if (!qrCode) {
@@ -67,7 +72,9 @@ export class ZapiController {
   @ApiOperation({ summary: 'Verificar status da conexão WhatsApp' })
   async status(
     @CurrentUser('profissional_id') profissionalId: string | undefined,
+    @CurrentUser('plano') plano: string | undefined,
   ): Promise<{ status: WppStatus }> {
+    this.requireWhatsappAccess(plano);
     const prof = await this.requireProf(profissionalId);
     const r = await this.whatsapp.getConnectionStatus(this.creds(prof));
     const novoStatus: WppStatus = r.connected ? 'conectado' : 'desconectado';
@@ -83,11 +90,24 @@ export class ZapiController {
   @ApiOperation({ summary: 'Desconectar WhatsApp' })
   async desconectar(
     @CurrentUser('profissional_id') profissionalId: string | undefined,
+    @CurrentUser('plano') plano: string | undefined,
   ): Promise<{ status: WppStatus }> {
+    this.requireWhatsappAccess(plano);
     const prof = await this.requireProf(profissionalId);
     await this.whatsapp.disconnect(this.creds(prof));
     await this.atualizarStatus(prof.id, 'desconectado');
     return { status: 'desconectado' };
+  }
+
+  private requireWhatsappAccess(planoRaw: string | undefined): void {
+    const plano = (planoRaw as PlanoId) ?? 'gratis';
+    if (!PLAN_LIMITS[plano].whatsapp) {
+      throw new ForbiddenException({
+        code: 'PLAN_LIMIT_REACHED',
+        resource: 'whatsapp',
+        message: 'Seu plano não inclui integração com WhatsApp. Faça upgrade para o plano Pro ou Studio.',
+      });
+    }
   }
 
   private creds(prof: ProfWppRow): WhatsappCredentials {

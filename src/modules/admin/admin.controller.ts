@@ -7,16 +7,19 @@ import {
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
 import { UpdateWhatsappDto } from './dto/update-whatsapp.dto';
 import { AtualizarPerfilAdminDto } from './dto/atualizar-perfil-admin.dto';
 import { CriarProfissionalDto } from './dto/criar-profissional.dto';
+import { AlterarPlanoDto } from './dto/alterar-plano.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -73,5 +76,19 @@ export class AdminController {
   @ApiOperation({ summary: 'Restaurar profissional arquivado (admin)' })
   restaurar(@Param('id') id: string) {
     return this.service.restaurarProfissional(id);
+  }
+
+  @Put('profissionais/:id/plano')
+  @ApiOperation({
+    summary:
+      'Alterar plano do profissional (admin) — substitui o fluxo de pagamento enquanto Stripe não existe',
+  })
+  alterarPlano(
+    @Param('id') id: string,
+    @Body() dto: AlterarPlanoDto,
+    @CurrentUser('id') actorId: string | undefined,
+  ) {
+    if (!actorId) throw new UnauthorizedException();
+    return this.service.alterarPlano(id, dto.plano, actorId);
   }
 }

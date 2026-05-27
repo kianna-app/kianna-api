@@ -10,10 +10,12 @@ import {
   createSupabaseClient,
 } from '../../config/supabase.config';
 import { AuthenticatedRequest } from '../types/authenticated-request';
+import { PlanoId } from '../../modules/planos/planos.catalog';
 
 interface ProfissionalRow {
   id: string;
   role: string | null;
+  plano: string | null;
 }
 
 @Injectable()
@@ -35,7 +37,7 @@ export class SupabaseAuthGuard implements CanActivate {
     const admin = createSupabaseClient(this.config);
     const { data: prof } = await admin
       .from('profissionais')
-      .select('id, role')
+      .select('id, role, plano')
       .eq('user_id', data.user.id)
       .single<ProfissionalRow>();
 
@@ -43,6 +45,7 @@ export class SupabaseAuthGuard implements CanActivate {
       ...data.user,
       profissional_id: prof?.id,
       role: prof?.role ?? undefined,
+      plano: (prof?.plano as PlanoId) ?? 'gratis',
     };
     return true;
   }

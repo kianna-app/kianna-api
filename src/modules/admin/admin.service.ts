@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,7 @@ import { createSupabaseClient } from '../../config/supabase.config';
 import { UpdateWhatsappDto } from './dto/update-whatsapp.dto';
 import { AtualizarPerfilAdminDto } from './dto/atualizar-perfil-admin.dto';
 import { CriarProfissionalDto } from './dto/criar-profissional.dto';
+import { PlanoId } from '../planos/planos.catalog';
 
 export interface ProfissionalRow {
   id: string;
@@ -19,6 +21,7 @@ export interface ProfissionalRow {
   whatsapp: string;
   foto_url: string | null;
   bio: string | null;
+  plano: PlanoId;
   wpp_instance_id: string | null;
   wpp_token: string | null;
   wpp_status: string;
@@ -27,11 +30,12 @@ export interface ProfissionalRow {
 }
 
 const SELECT_COLUNAS =
-  'id, nome, slug, whatsapp, foto_url, bio, wpp_instance_id, wpp_token, wpp_status, ativo, created_at';
+  'id, nome, slug, whatsapp, foto_url, bio, plano, wpp_instance_id, wpp_token, wpp_status, ativo, created_at';
 
 @Injectable()
 export class AdminService {
   private readonly supabase: SupabaseClient;
+  private readonly logger = new Logger(AdminService.name);
 
   constructor(config: ConfigService) {
     this.supabase = createSupabaseClient(config);
@@ -57,6 +61,7 @@ export class AdminService {
       whatsapp: p.whatsapp,
       foto_url: p.foto_url,
       bio: p.bio,
+      plano: p.plano,
       wpp_instance_id: p.wpp_instance_id,
       wpp_status: p.wpp_status,
       tem_token: !!p.wpp_token,
@@ -204,5 +209,43 @@ export class AdminService {
 
     if (error) throw new InternalServerErrorException(error.message);
     return { ok: true };
+  }
+
+  /**
+   * Altera o plano de um profissional manualmente (admin).
+   * Substitui o fluxo de pagamento enquanto o Stripe não está integrado.
+   * Loga de/para para auditoria (sem dados sensíveis).
+   */
+  async alterarPlano(
+    id: string,
+    plano: PlanoId,
+    actorId: string,
+  ): Promise<{ ok: true; plano: PlanoId }> {
+    const { data: atual, error: errAtual } = await this.supabase
+      .from('profissionais')
+      .select('id, plano')
+      .eq('id', id)
+      .single<{ id: string; plano: PlanoId }>();
+
+    if (errAtual || !atual) {
+      throw new NotFoundException('Profissional não encontrado');
+    }
+
+    if (atual.plano === plano) {
+      return { ok: true, plano };
+    }
+
+    const { error } = await this.supabase
+      .from('profissionais')
+      .update({ plano })
+      .eq('id', id);
+
+    if (error) throw new InternalServerErrorException(error.message);
+
+    this.logger.log(
+      `Plano alterado | profissional_id=${id} | de=${atual.plano} | para=${plano} | por=${actorId}`,
+    );
+
+    return { ok: true, plano };
   }
 }

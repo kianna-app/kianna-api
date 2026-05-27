@@ -4,8 +4,8 @@ import { ServicosService } from '../servicos/servicos.service';
 import { DisponibilidadesService } from '../disponibilidades/disponibilidades.service';
 import { BloqueiosService } from '../bloqueios/bloqueios.service';
 import { AgendamentosService } from '../agendamentos/agendamentos.service';
-
-const LIMITE_GRATIS_AGENDAMENTOS_MES = 20;
+import { PLAN_LIMITS, excedeuLimite } from '../../common/constants/plan.limits';
+import { PlanoId } from '../planos/planos.catalog';
 
 @Injectable()
 export class BookingService {
@@ -33,9 +33,11 @@ export class BookingService {
     const dataFimISO = dataFim.toISOString().split('T')[0];
 
     let lotado = false;
-    if (prof.plano === 'gratis') {
+    const plano = (prof.plano as PlanoId) ?? 'gratis';
+    const limiteAgendamentos = PLAN_LIMITS[plano].agendamentosMes;
+    if (limiteAgendamentos !== null) {
       const count = await this.profService.contarAgendamentosNoMes(prof.id);
-      lotado = count >= LIMITE_GRATIS_AGENDAMENTOS_MES;
+      lotado = excedeuLimite(count, limiteAgendamentos);
     }
 
     const [servicos, disponibilidades, bloqueios, agendamentosConfirmados] =

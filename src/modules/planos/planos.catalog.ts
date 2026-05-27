@@ -8,7 +8,7 @@
  * TODO(pagamento): quando integrar Stripe, mapear cada plano para o stripe_price_id
  * correspondente e referenciar em iniciarUpgrade().
  */
-export type PlanoId = 'gratis' | 'pro' | 'studio';
+export type PlanoId = 'gratis' | 'essencial' | 'pro' | 'studio';
 
 export interface PlanoBackend {
   id: PlanoId;
@@ -21,10 +21,17 @@ export interface PlanoBackend {
 export const PLANOS_BACKEND: PlanoBackend[] = [
   {
     id: 'gratis',
+    nome: 'Grátis',
+    preco: 0,
+    precoLabel: 'R$ 0/mês',
+    resumo: 'Agenda e página pública.',
+  },
+  {
+    id: 'essencial',
     nome: 'Essencial',
     preco: 49,
     precoLabel: 'R$ 49/mês',
-    resumo: 'Agenda e página pública.',
+    resumo: 'Para profissionais que já passaram do Grátis.',
   },
   {
     id: 'pro',
@@ -42,4 +49,4 @@ export const PLANOS_BACKEND: PlanoBackend[] = [
   },
 ];
 
-export const PLANO_IDS: PlanoId[] = ['gratis', 'pro', 'studio'];
+export const PLANO_IDS: PlanoId[] = ['gratis', 'essencial', 'pro', 'studio'];

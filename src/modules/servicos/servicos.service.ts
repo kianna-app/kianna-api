@@ -10,6 +10,12 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseClient } from '../../config/supabase.config';
 import { CriarServicoDto } from './dto/criar-servico.dto';
 import { AtualizarServicoDto } from './dto/atualizar-servico.dto';
+import {
+  PLAN_LIMITS,
+  excedeuLimite,
+  PLAN_LIMIT_REACHED_CODE,
+} from '../../common/constants/plan.limits';
+import { PlanoId } from '../planos/planos.catalog';
 
 export interface Servico {
   id: string;
@@ -62,8 +68,28 @@ export class ServicosService {
   async criar(
     profissionalId: string | undefined,
     dto: CriarServicoDto,
+    planoRaw?: string,
   ): Promise<Servico> {
     const profId = this.requireProf(profissionalId);
+    const plano = (planoRaw as PlanoId) ?? 'gratis';
+    const limiteServicos = PLAN_LIMITS[plano].servicos;
+
+    if (limiteServicos !== null) {
+      const { count, error: countError } = await this.supabase
+        .from('servicos')
+        .select('id', { count: 'exact', head: true })
+        .eq('profissional_id', profId);
+      if (countError) throw new InternalServerErrorException(countError.message);
+      if (excedeuLimite(count ?? 0, limiteServicos)) {
+        throw new ForbiddenException({
+          code: PLAN_LIMIT_REACHED_CODE,
+          resource: 'services',
+          limit: limiteServicos,
+          message: `Limite do plano atingido: ${limiteServicos} serviço${limiteServicos === 1 ? '' : 's'} permitido${limiteServicos === 1 ? '' : 's'} no plano atual.`,
+        });
+      }
+    }
+
     const { data, error } = await this.supabase
       .from('servicos')
       .insert({ ativo: true, ...dto, profissional_id: profId })

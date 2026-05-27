@@ -48,8 +48,9 @@ export class ServicosController {
   criar(
     @Body() dto: CriarServicoDto,
     @CurrentUser('profissional_id') profId?: string,
+    @CurrentUser('plano') plano?: string,
   ) {
-    return this.service.criar(profId, dto);
+    return this.service.criar(profId, dto, plano);
   }
 
   @Patch(':id')
