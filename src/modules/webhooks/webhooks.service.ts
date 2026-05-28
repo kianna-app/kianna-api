@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseClient } from '@supabase/supabase-js';
+import * as Sentry from '@sentry/nestjs';
 import { createSupabaseClient } from '../../config/supabase.config';
 import { WppStatus } from '../../common/constants/lembrete.constants';
 import { RespostasService } from '../respostas/respostas.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 // Z-API publica vários tipos de evento. Listamos como string solta para
 // permitir tratar eventos novos sem quebrar o TypeScript.
@@ -28,6 +30,7 @@ export class WebhooksService {
   constructor(
     config: ConfigService,
     private readonly respostas: RespostasService,
+    private readonly auditoria: AuditoriaService,
   ) {
     this.supabase = createSupabaseClient(config);
   }
@@ -59,11 +62,21 @@ export class WebhooksService {
           this.logger.log(
             `Mensagem recebida (instance=${msg.instanceId}, phone=${msg.phone}): "${msg.texto}"`,
           );
-          await this.respostas.processarResposta(
-            msg.instanceId,
-            msg.phone,
-            msg.texto,
-          );
+          try {
+            await this.respostas.processarResposta(
+              msg.instanceId,
+              msg.phone,
+              msg.texto,
+            );
+          } catch (err) {
+            Sentry.captureException(err, {
+              tags: { area: 'webhook_zapi', tipo: 'ReceivedCallback' },
+              extra: { instanceId: msg.instanceId },
+            });
+            this.logger.error(
+              `Erro ao processar resposta (instance=${msg.instanceId}): ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
         return;
       }
@@ -108,6 +121,12 @@ export class WebhooksService {
       return;
     }
 
+    const { data: prof } = await this.supabase
+      .from('profissionais')
+      .select('id')
+      .eq('wpp_instance_id', instanceId)
+      .maybeSingle<{ id: string }>();
+
     const { error } = await this.supabase
       .from('profissionais')
       .update({ wpp_status: status })
@@ -117,8 +136,24 @@ export class WebhooksService {
       this.logger.error(
         `Erro ao atualizar wpp_status (${instanceId} → ${status}): ${error.message}`,
       );
+      Sentry.captureException(
+        new Error(`Falha ao atualizar wpp_status: ${error.message}`),
+        { tags: { area: 'webhook_zapi' }, extra: { instanceId, status } },
+      );
       return;
     }
     this.logger.log(`Instância ${instanceId}: ${status}`);
+
+    if (status === 'desconectado' && prof?.id) {
+      void this.auditoria.registrar({
+        ator_id: prof.id,
+        ator_tipo: 'sistema',
+        acao: 'wpp_desconectado',
+        recurso: 'whatsapp',
+        recurso_id: prof.id,
+        detalhes: { instance_id: instanceId },
+        resultado: 'sucesso',
+      });
+    }
   }
 }

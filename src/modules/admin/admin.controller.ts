@@ -62,8 +62,12 @@ export class AdminController {
   @ApiOperation({
     summary: 'Atualizar credenciais Z-API do profissional (admin)',
   })
-  atualizarWhatsapp(@Param('id') id: string, @Body() dto: UpdateWhatsappDto) {
-    return this.service.atualizarWhatsapp(id, dto);
+  atualizarWhatsapp(
+    @Param('id') id: string,
+    @Body() dto: UpdateWhatsappDto,
+    @CurrentUser('profissional_id') actorProfissionalId: string | undefined,
+  ) {
+    return this.service.atualizarWhatsapp(id, dto, actorProfissionalId);
   }
 
   @Delete('profissionais/:id')
@@ -87,8 +91,9 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: AlterarPlanoDto,
     @CurrentUser('id') actorId: string | undefined,
+    @CurrentUser('profissional_id') actorProfissionalId: string | undefined,
   ) {
     if (!actorId) throw new UnauthorizedException();
-    return this.service.alterarPlano(id, dto.plano, actorId);
+    return this.service.alterarPlano(id, dto.plano, actorId, actorProfissionalId);
   }
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { AppController } from './app.controller';
 import appConfig from './config/app.config';
 import { AgendamentosModule } from './modules/agendamentos/agendamentos.module';
@@ -18,6 +19,7 @@ import { LembretesModule } from './modules/lembretes/lembretes.module';
 import { PlanosModule } from './modules/planos/planos.module';
 import { AvisosModule } from './modules/avisos/avisos.module';
 import { RelatorioModule } from './modules/relatorio/relatorio.module';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { RelatorioModule } from './modules/relatorio/relatorio.module';
       isGlobal: true,
       load: [appConfig],
     }),
+    SentryModule.forRoot(),
     ScheduleModule.forRoot(),
     ZapiModule,
     NotificacoesModule,
@@ -41,6 +44,7 @@ import { RelatorioModule } from './modules/relatorio/relatorio.module';
     PlanosModule,
     AvisosModule,
     RelatorioModule,
+    AuditoriaModule,
   ],
   controllers: [AppController],
 })

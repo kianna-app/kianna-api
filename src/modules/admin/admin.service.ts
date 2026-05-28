@@ -13,6 +13,7 @@ import { UpdateWhatsappDto } from './dto/update-whatsapp.dto';
 import { AtualizarPerfilAdminDto } from './dto/atualizar-perfil-admin.dto';
 import { CriarProfissionalDto } from './dto/criar-profissional.dto';
 import { PlanoId } from '../planos/planos.catalog';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 export interface ProfissionalRow {
   id: string;
@@ -37,7 +38,10 @@ export class AdminService {
   private readonly supabase: SupabaseClient;
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly auditoria: AuditoriaService,
+  ) {
     this.supabase = createSupabaseClient(config);
   }
 
@@ -85,6 +89,7 @@ export class AdminService {
   async atualizarWhatsapp(
     id: string,
     dto: UpdateWhatsappDto,
+    actorProfissionalId?: string | null,
   ): Promise<{ ok: true }> {
     const { error } = await this.supabase
       .from('profissionais')
@@ -94,7 +99,28 @@ export class AdminService {
       })
       .eq('id', id);
 
-    if (error) throw new InternalServerErrorException(error.message);
+    if (error) {
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'credencial_zapi_atualizada',
+        recurso: 'profissional',
+        recurso_id: id,
+        detalhes: { erro: error.message },
+        resultado: 'falha',
+      });
+      throw new InternalServerErrorException(error.message);
+    }
+
+    void this.auditoria.registrar({
+      ator_id: actorProfissionalId ?? null,
+      ator_tipo: 'admin',
+      acao: 'credencial_zapi_atualizada',
+      recurso: 'profissional',
+      recurso_id: id,
+      detalhes: { wpp_instance_id: dto.wpp_instance_id },
+      resultado: 'sucesso',
+    });
     return { ok: true };
   }
 
@@ -219,7 +245,8 @@ export class AdminService {
   async alterarPlano(
     id: string,
     plano: PlanoId,
-    actorId: string,
+    actorUserId: string,
+    actorProfissionalId?: string | null,
   ): Promise<{ ok: true; plano: PlanoId }> {
     const { data: atual, error: errAtual } = await this.supabase
       .from('profissionais')
@@ -240,11 +267,32 @@ export class AdminService {
       .update({ plano })
       .eq('id', id);
 
-    if (error) throw new InternalServerErrorException(error.message);
+    if (error) {
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'alteracao_plano',
+        recurso: 'profissional',
+        recurso_id: id,
+        detalhes: { de: atual.plano, para: plano, erro: error.message },
+        resultado: 'falha',
+      });
+      throw new InternalServerErrorException(error.message);
+    }
 
     this.logger.log(
-      `Plano alterado | profissional_id=${id} | de=${atual.plano} | para=${plano} | por=${actorId}`,
+      `Plano alterado | profissional_id=${id} | de=${atual.plano} | para=${plano} | por=${actorUserId}`,
     );
+
+    void this.auditoria.registrar({
+      ator_id: actorProfissionalId ?? null,
+      ator_tipo: 'admin',
+      acao: 'alteracao_plano',
+      recurso: 'profissional',
+      recurso_id: id,
+      detalhes: { de: atual.plano, para: plano },
+      resultado: 'sucesso',
+    });
 
     return { ok: true, plano };
   }

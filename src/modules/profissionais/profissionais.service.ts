@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseClient } from '../../config/supabase.config';
 import { AtualizarPerfilDto } from './dto/atualizar-perfil.dto';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 export interface Profissional {
   id: string;
@@ -55,7 +56,10 @@ const PUBLIC_FIELDS = [
 export class ProfissionaisService {
   private readonly supabase: SupabaseClient;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly auditoria: AuditoriaService,
+  ) {
     this.supabase = createSupabaseClient(config);
   }
 
@@ -78,15 +82,40 @@ export class ProfissionaisService {
   }
 
   async desativarPorUserId(userId: string): Promise<void> {
+    const { data: prof } = await this.supabase
+      .from('profissionais')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle<{ id: string }>();
+
     const { error } = await this.supabase
       .from('profissionais')
       .update({ ativo: false })
       .eq('user_id', userId);
 
-    if (error)
+    if (error) {
+      void this.auditoria.registrar({
+        ator_id: prof?.id ?? null,
+        ator_tipo: 'profissional',
+        acao: 'exclusao_conta',
+        recurso: 'profissional',
+        recurso_id: prof?.id ?? null,
+        detalhes: { erro: error.message },
+        resultado: 'falha',
+      });
       throw new InternalServerErrorException(
         `Erro ao desativar conta: ${error.message}`,
       );
+    }
+
+    void this.auditoria.registrar({
+      ator_id: prof?.id ?? null,
+      ator_tipo: 'profissional',
+      acao: 'exclusao_conta',
+      recurso: 'profissional',
+      recurso_id: prof?.id ?? null,
+      resultado: 'sucesso',
+    });
   }
 
   async porSlug(slug: string): Promise<Profissional> {

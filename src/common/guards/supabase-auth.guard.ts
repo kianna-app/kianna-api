@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as Sentry from '@sentry/nestjs';
 import {
   createSupabaseAnonClient,
   createSupabaseClient,
@@ -47,6 +48,12 @@ export class SupabaseAuthGuard implements CanActivate {
       role: prof?.role ?? undefined,
       plano: (prof?.plano as PlanoId) ?? 'gratis',
     };
+
+    Sentry.getCurrentScope().setUser({
+      id: prof?.id,
+      role: prof?.role ?? undefined,
+    });
+
     return true;
   }
 }

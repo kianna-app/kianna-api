@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseClient } from '@supabase/supabase-js';
+import * as Sentry from '@sentry/nestjs';
 import { createSupabaseClient } from '../../config/supabase.config';
 import { WHATSAPP_PROVIDER } from '../zapi/whatsapp-provider.interface';
 import type {
@@ -8,6 +9,7 @@ import type {
   WhatsappProvider,
 } from '../zapi/whatsapp-provider.interface';
 import { WppStatus } from '../../common/constants/lembrete.constants';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 interface WppConfig {
   wpp_instance_id: string;
@@ -61,9 +63,59 @@ export class NotificacoesService {
     @Inject(WHATSAPP_PROVIDER)
     private readonly whatsapp: WhatsappProvider,
     private readonly config: ConfigService,
+    private readonly auditoria: AuditoriaService,
   ) {
     this.supabase = createSupabaseClient(config);
     this.appUrl = this.config.get<string>('APP_URL') ?? APP_URL_DEFAULT;
+  }
+
+  /**
+   * Envia texto via provider e registra auditoria do envio.
+   * Em caso de exceção do provider, captura no Sentry e re-lança.
+   * `recursoId` é o profissional_id (referência da tabela `logs_auditoria`).
+   */
+  private async enviarTextoComAuditoria(
+    profissionalId: string,
+    creds: WhatsappCredentials,
+    phone: string,
+    message: string,
+    contextoTipo: string,
+  ): Promise<boolean> {
+    try {
+      const ok = await this.whatsapp.sendTextMessage({
+        credentials: creds,
+        phone,
+        message,
+      });
+      void this.auditoria.registrar({
+        ator_id: profissionalId,
+        ator_tipo: 'sistema',
+        acao: ok ? 'notificacao_enviada' : 'notificacao_falha',
+        recurso: 'whatsapp',
+        recurso_id: profissionalId,
+        detalhes: { tipo: contextoTipo },
+        resultado: ok ? 'sucesso' : 'falha',
+      });
+      return ok;
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { area: 'notificacoes', tipo: contextoTipo },
+        extra: { profissional_id: profissionalId },
+      });
+      void this.auditoria.registrar({
+        ator_id: profissionalId,
+        ator_tipo: 'sistema',
+        acao: 'notificacao_falha',
+        recurso: 'whatsapp',
+        recurso_id: profissionalId,
+        detalhes: {
+          tipo: contextoTipo,
+          erro: err instanceof Error ? err.message : String(err),
+        },
+        resultado: 'falha',
+      });
+      throw err;
+    }
   }
 
   private credsOf(wpp: WppConfig): WhatsappCredentials {
@@ -112,11 +164,13 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Acesse o painel para confirmar ou recusar.`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: wpp.whatsapp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      wpp.whatsapp,
+      msg,
+      'nova_solicitacao_profissional',
+    );
   }
 
   // ───── 2. Confirmado → notifica cliente ─────
@@ -133,11 +187,13 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Até lá! 😊`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'confirmacao_cliente',
+    );
   }
 
   // ───── 3. Recusado → notifica cliente ─────
@@ -159,11 +215,13 @@ export class NotificacoesService {
 
     msg += `\n\nVocê pode solicitar um novo horário em ${this.appUrl}/${wpp.slug}`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'recusa_cliente',
+    );
   }
 
   // ───── 4. Cancelado pelo profissional → notifica cliente ─────
@@ -180,11 +238,13 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Você pode solicitar um novo horário em ${this.appUrl}/${wpp.slug}`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'cancelamento_profissional_cliente',
+    );
   }
 
   // ───── 5. Reagendamento iniciado pelo profissional → envia link ao cliente ─────
@@ -199,11 +259,13 @@ export class NotificacoesService {
       `${wpp.nome} precisa reagendar seu atendimento.\n\n` +
       `Clique no link para escolher um novo horário:\n${link}`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'reagendamento_cliente',
+    );
   }
 
   // ───── 6. Cancelamento pelo cliente → notifica profissional ─────
@@ -221,11 +283,13 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `O horário foi liberado na sua agenda.`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: wpp.whatsapp,
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      wpp.whatsapp,
+      msg,
+      'cancelamento_cliente_profissional',
+    );
   }
 
   // ───── 7. Lembrete antes do atendimento (usado pelo cron — PR4) ─────
@@ -244,15 +308,46 @@ export class NotificacoesService {
         `📅 ${data}\n\n` +
         `Confirme sua presença:`;
 
-      return this.whatsapp.sendButtonMessage({
-        credentials: this.credsOf(wpp),
-        phone: evt.cliente_wpp,
-        message: msg,
-        buttons: [
-          { id: 'confirmar_presenca', label: '1 - Confirmar presença' },
-          { id: 'cancelar_agendamento', label: '2 - Cancelar' },
-        ],
-      });
+      try {
+        const ok = await this.whatsapp.sendButtonMessage({
+          credentials: this.credsOf(wpp),
+          phone: evt.cliente_wpp,
+          message: msg,
+          buttons: [
+            { id: 'confirmar_presenca', label: '1 - Confirmar presença' },
+            { id: 'cancelar_agendamento', label: '2 - Cancelar' },
+          ],
+        });
+        void this.auditoria.registrar({
+          ator_id: evt.profissional_id,
+          ator_tipo: 'sistema',
+          acao: ok ? 'notificacao_enviada' : 'notificacao_falha',
+          recurso: 'whatsapp',
+          recurso_id: evt.profissional_id,
+          detalhes: { tipo: 'lembrete_botoes', agendamento_id: evt.agendamento_id },
+          resultado: ok ? 'sucesso' : 'falha',
+        });
+        return ok;
+      } catch (err) {
+        Sentry.captureException(err, {
+          tags: { area: 'notificacoes', tipo: 'lembrete_botoes' },
+          extra: { profissional_id: evt.profissional_id },
+        });
+        void this.auditoria.registrar({
+          ator_id: evt.profissional_id,
+          ator_tipo: 'sistema',
+          acao: 'notificacao_falha',
+          recurso: 'whatsapp',
+          recurso_id: evt.profissional_id,
+          detalhes: {
+            tipo: 'lembrete_botoes',
+            agendamento_id: evt.agendamento_id,
+            erro: err instanceof Error ? err.message : String(err),
+          },
+          resultado: 'falha',
+        });
+        throw err;
+      }
     }
 
     const msg =
@@ -263,11 +358,13 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `Até lá! 😊`;
 
-    return this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp,
-      message: msg,
-    });
+    return this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'lembrete_simples',
+    );
   }
 
   /** Formata ISO → "segunda-feira, 19/05/2026 às 14:30" (timezone Brasília). */
@@ -301,10 +398,12 @@ export class NotificacoesService {
       `📅 ${data}\n\n` +
       `⏳ Aguarde a confirmação. Você receberá um aviso assim que ${wpp.nome} confirmar.`;
 
-    await this.whatsapp.sendTextMessage({
-      credentials: this.credsOf(wpp),
-      phone: evt.cliente_wpp, // ← número do CLIENTE
-      message: msg,
-    });
+    await this.enviarTextoComAuditoria(
+      evt.profissional_id,
+      this.credsOf(wpp),
+      evt.cliente_wpp,
+      msg,
+      'solicitacao_recebida_cliente',
+    );
   }
 }
