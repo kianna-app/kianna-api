@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @ApiTags('health')
 @Controller()
@@ -14,5 +14,11 @@ export class AppController {
   @ApiOperation({ summary: 'Health check da API' })
   health(): { status: string; timestamp: string } {
     return { status: 'ok', timestamp: new Date().toISOString() };
+  }
+
+  @Get('debug/sentry-test')
+  @ApiExcludeEndpoint()
+  sentryTest(): void {
+    throw new Error('Sentry teste Kianna - pode remover');
   }
 }
