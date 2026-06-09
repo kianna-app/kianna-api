@@ -45,8 +45,20 @@ export class AdminController {
 
   @Post('profissionais')
   @ApiOperation({ summary: 'Criar profissional pré-cadastrado (admin)' })
-  criar(@Body() dto: CriarProfissionalDto) {
-    return this.service.criarProfissional(dto);
+  criar(
+    @Body() dto: CriarProfissionalDto,
+    @CurrentUser('profissional_id') actorProfissionalId: string | undefined,
+  ) {
+    return this.service.criarProfissional(dto, actorProfissionalId);
+  }
+
+  @Post('profissionais/:id/reset-senha')
+  @ApiOperation({ summary: 'Enviar e-mail de redefinição de senha (admin)' })
+  resetarSenha(
+    @Param('id') id: string,
+    @CurrentUser('profissional_id') actorProfissionalId: string | undefined,
+  ) {
+    return this.service.resetarSenha(id, actorProfissionalId);
   }
 
   @Put('profissionais/:id')

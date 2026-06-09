@@ -7,6 +7,8 @@ export type AuditoriaAcao =
   | 'logout'
   | 'alteracao_senha'
   | 'exclusao_conta'
+  | 'profissional_criado_admin'
+  | 'reset_senha_admin'
   | 'alteracao_plano'
   | 'credencial_zapi_atualizada'
   | 'notificacao_enviada'

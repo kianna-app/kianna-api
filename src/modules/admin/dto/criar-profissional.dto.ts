@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -8,6 +9,8 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { PLANO_IDS } from '../../planos/planos.catalog';
+import type { PlanoId } from '../../planos/planos.catalog';
 
 export class CriarProfissionalDto {
   @ApiProperty()
@@ -19,6 +22,12 @@ export class CriarProfissionalDto {
   @ApiProperty()
   @IsEmail()
   email!: string;
+
+  @ApiProperty({ description: 'Senha temporária definida pelo admin' })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  senhaTemporaria!: string;
 
   @ApiProperty({
     description: 'Slug em minúsculas, sem espaços/acentos, com hífens',
@@ -36,4 +45,9 @@ export class CriarProfissionalDto {
   @IsString()
   @MaxLength(32)
   whatsapp?: string;
+
+  @ApiPropertyOptional({ enum: PLANO_IDS, default: 'gratis' })
+  @IsOptional()
+  @IsIn(PLANO_IDS)
+  plano?: PlanoId;
 }

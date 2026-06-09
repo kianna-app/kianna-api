@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -40,6 +41,40 @@ export class ServicosService {
     if (!profissionalId)
       throw new UnauthorizedException('Profissional não vinculado ao usuário');
     return profissionalId;
+  }
+
+  private normalizarNome(nome: string): string {
+    return nome.trim().replace(/\s+/g, ' ');
+  }
+
+  private chaveNome(nome: string): string {
+    return this.normalizarNome(nome).toLocaleLowerCase('pt-BR');
+  }
+
+  private async garantirNomeUnico(
+    profissionalId: string,
+    nome: string,
+    ignorarId?: string,
+  ): Promise<void> {
+    const nomeNormalizado = this.chaveNome(nome);
+    const { data, error } = await this.supabase
+      .from('servicos')
+      .select('id, nome')
+      .eq('profissional_id', profissionalId);
+
+    if (error) throw new InternalServerErrorException(error.message);
+
+    const duplicado = (data ?? []).some((servico) => {
+      if (ignorarId && servico.id === ignorarId) return false;
+      return this.chaveNome(servico.nome) === nomeNormalizado;
+    });
+
+    if (duplicado) {
+      throw new ConflictException({
+        code: 'SERVICE_NAME_DUPLICATED',
+        message: 'Já existe um serviço com este nome.',
+      });
+    }
   }
 
   async listar(profissionalId?: string): Promise<Servico[]> {
@@ -90,9 +125,12 @@ export class ServicosService {
       }
     }
 
+    const input = { ativo: true, ...dto, nome: this.normalizarNome(dto.nome) };
+    await this.garantirNomeUnico(profId, input.nome);
+
     const { data, error } = await this.supabase
       .from('servicos')
-      .insert({ ativo: true, ...dto, profissional_id: profId })
+      .insert({ ...input, profissional_id: profId })
       .select()
       .single<Servico>();
     if (error || !data) throw new InternalServerErrorException(error?.message);
@@ -105,9 +143,17 @@ export class ServicosService {
     dto: AtualizarServicoDto,
   ): Promise<Servico> {
     const profId = this.requireProf(profissionalId);
+    const input = dto.nome
+      ? { ...dto, nome: this.normalizarNome(dto.nome) }
+      : dto;
+
+    if (input.nome) {
+      await this.garantirNomeUnico(profId, input.nome, id);
+    }
+
     const { data, error } = await this.supabase
       .from('servicos')
-      .update(dto)
+      .update(input)
       .eq('id', id)
       .eq('profissional_id', profId)
       .select()

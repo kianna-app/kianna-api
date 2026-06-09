@@ -17,6 +17,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 
 export interface ProfissionalRow {
   id: string;
+  user_id: string | null;
   nome: string;
   slug: string;
   whatsapp: string;
@@ -28,21 +29,28 @@ export interface ProfissionalRow {
   wpp_status: string;
   ativo: boolean;
   created_at: string;
+  email?: string | null;
 }
 
 const SELECT_COLUNAS =
-  'id, nome, slug, whatsapp, foto_url, bio, plano, wpp_instance_id, wpp_token, wpp_status, ativo, created_at';
+  'id, user_id, nome, slug, whatsapp, foto_url, bio, plano, wpp_instance_id, wpp_token, wpp_status, ativo, created_at';
 
 @Injectable()
 export class AdminService {
   private readonly supabase: SupabaseClient;
   private readonly logger = new Logger(AdminService.name);
+  private readonly authRedirectUrl: string;
 
   constructor(
     config: ConfigService,
     private readonly auditoria: AuditoriaService,
   ) {
     this.supabase = createSupabaseClient(config);
+    const frontendUrl =
+      config.get<string>('frontendUrl') ??
+      config.get<string>('FRONTEND_URL') ??
+      'http://localhost:4200';
+    this.authRedirectUrl = `${frontendUrl.replace(/\/$/, '')}/auth/nova-senha`;
   }
 
   async listarProfissionais(incluirInativos = false) {
@@ -58,10 +66,17 @@ export class AdminService {
     const { data, error } = await query;
     if (error) throw new InternalServerErrorException(error.message);
 
-    return (data as ProfissionalRow[]).map((p) => ({
+    const profissionais = data as ProfissionalRow[];
+    const emails = await this.buscarEmailsPorUserId(
+      profissionais.map((p) => p.user_id).filter((id): id is string => !!id),
+    );
+
+    return profissionais.map((p) => ({
       id: p.id,
+      user_id: p.user_id,
       nome: p.nome,
       slug: p.slug,
+      email: p.user_id ? emails.get(p.user_id) ?? null : null,
       whatsapp: p.whatsapp,
       foto_url: p.foto_url,
       bio: p.bio,
@@ -83,7 +98,48 @@ export class AdminService {
 
     if (error || !data)
       throw new NotFoundException('Profissional não encontrado');
+    const email = data.user_id
+      ? await this.buscarEmailPorUserId(data.user_id)
+      : null;
+    data.email = email;
     return data;
+  }
+
+  private async buscarEmailPorUserId(userId: string): Promise<string | null> {
+    const { data } = await this.supabase.auth.admin.getUserById(userId);
+    return data?.user?.email ?? null;
+  }
+
+  private async buscarEmailsPorUserId(
+    userIds: string[],
+  ): Promise<Map<string, string>> {
+    const pares = await Promise.all(
+      userIds.map(async (userId) => ({
+        userId,
+        email: await this.buscarEmailPorUserId(userId),
+      })),
+    );
+
+    return new Map(
+      pares
+        .filter((p): p is { userId: string; email: string } => !!p.email)
+        .map((p) => [p.userId, p.email]),
+    );
+  }
+
+  private mensagemErroAuthSupabase(message: string | undefined): string {
+    if (!message) return 'Não foi possível criar usuário no Supabase Auth.';
+
+    const msg = message.toLowerCase();
+    if (msg.includes('email address') && msg.includes('invalid')) {
+      return 'E-mail inválido ou não aceito pelo provedor. Use um endereço real e válido.';
+    }
+
+    if (msg.includes('already') || msg.includes('registered')) {
+      return 'Este e-mail já possui uma conta. Use outro e-mail ou resete a senha do profissional existente.';
+    }
+
+    return message;
   }
 
   async atualizarWhatsapp(
@@ -176,7 +232,10 @@ export class AdminService {
     return data;
   }
 
-  async criarProfissional(dto: CriarProfissionalDto): Promise<ProfissionalRow> {
+  async criarProfissional(
+    dto: CriarProfissionalDto,
+    actorProfissionalId?: string | null,
+  ): Promise<ProfissionalRow> {
     const { data: existenteSlug } = await this.supabase
       .from('profissionais')
       .select('id')
@@ -187,26 +246,59 @@ export class AdminService {
       throw new ConflictException('Este slug já está em uso');
     }
 
-    // TODO: Definir fluxo de acesso do profissional (convite/magic-link/definição de senha).
-    // Por ora, o registro é criado sem user_id vinculado; o profissional ainda não pode
-    // logar até que esse fluxo exista. Operar pelo /admin enquanto isso.
+    const { data: authUser, error: authError } =
+      await this.supabase.auth.admin.createUser({
+        email: dto.email,
+        password: dto.senhaTemporaria,
+        email_confirm: true,
+        user_metadata: {
+          nome: dto.nome,
+          slug: dto.slug,
+          senha_temporaria: true,
+        },
+      });
+
+    if (authError || !authUser?.user?.id) {
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'profissional_criado_admin',
+        recurso: 'profissional',
+        detalhes: { erro: authError?.message },
+        resultado: 'falha',
+      });
+      throw new BadRequestException(
+        this.mensagemErroAuthSupabase(authError?.message),
+      );
+    }
+
     const { data, error } = await this.supabase
       .from('profissionais')
       .insert({
+        user_id: authUser.user.id,
         nome: dto.nome,
         slug: dto.slug,
         whatsapp: dto.whatsapp ?? '',
+        plano: dto.plano ?? 'gratis',
         ativo: true,
-        onboarding_concluido: false,
+        onboarding_concluido: true,
       })
       .select(SELECT_COLUNAS)
       .single<ProfissionalRow>();
 
     if (error || !data) {
       const msg = error?.message ?? 'desconhecido';
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'profissional_criado_admin',
+        recurso: 'profissional',
+        detalhes: { erro: msg },
+        resultado: 'falha',
+      });
       if (msg.includes('user_id')) {
         throw new BadRequestException(
-          'O schema atual exige user_id. Implemente o fluxo de convite do profissional antes (ver TODO em admin.service).',
+          'O schema atual exige user_id. Não foi possível vincular o usuário criado no Auth ao profissional.',
         );
       }
       throw new InternalServerErrorException(
@@ -214,7 +306,70 @@ export class AdminService {
       );
     }
 
-    return data;
+    const criado = { ...data, email: authUser.user.email ?? dto.email };
+    void this.auditoria.registrar({
+      ator_id: actorProfissionalId ?? null,
+      ator_tipo: 'admin',
+      acao: 'profissional_criado_admin',
+      recurso: 'profissional',
+      recurso_id: criado.id,
+      detalhes: {
+        plano: criado.plano,
+        senha_temporaria: true,
+      },
+      resultado: 'sucesso',
+    });
+
+    return criado;
+  }
+
+  async resetarSenha(
+    id: string,
+    actorProfissionalId?: string | null,
+  ): Promise<{ ok: true; email: string }> {
+    const prof = await this.buscarProfissional(id);
+    const email = prof.email;
+
+    if (!email) {
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'reset_senha_admin',
+        recurso: 'profissional',
+        recurso_id: id,
+        detalhes: { erro: 'profissional_sem_email' },
+        resultado: 'falha',
+      });
+      throw new BadRequestException('Profissional não possui e-mail vinculado.');
+    }
+
+    const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: this.authRedirectUrl,
+    });
+
+    if (error) {
+      void this.auditoria.registrar({
+        ator_id: actorProfissionalId ?? null,
+        ator_tipo: 'admin',
+        acao: 'reset_senha_admin',
+        recurso: 'profissional',
+        recurso_id: id,
+        detalhes: { erro: error.message },
+        resultado: 'falha',
+      });
+      throw new BadRequestException(error.message);
+    }
+
+    void this.auditoria.registrar({
+      ator_id: actorProfissionalId ?? null,
+      ator_tipo: 'admin',
+      acao: 'reset_senha_admin',
+      recurso: 'profissional',
+      recurso_id: id,
+      resultado: 'sucesso',
+    });
+
+    return { ok: true, email };
   }
 
   async arquivarProfissional(id: string): Promise<{ ok: true }> {
