@@ -35,6 +35,7 @@ const PUBLIC_FIELDS = [
   'especialidade',
   'bio',
   'whatsapp',
+  'politica_cancelamento',
   'endereco_cep',
   'endereco_rua',
   'endereco_numero',
