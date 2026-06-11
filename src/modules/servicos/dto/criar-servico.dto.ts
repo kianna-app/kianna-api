@@ -18,6 +18,14 @@ export class CriarServicoDto {
   @MaxLength(100)
   nome!: string;
 
+  @ApiPropertyOptional({
+    example: 'Técnica de massagem que melhora a circulação, reduz inchaço e proporciona bem-estar.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  descricao?: string | null;
+
   @ApiProperty({ example: 30 })
   @IsNumber()
   @Min(5)

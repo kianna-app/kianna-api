@@ -284,6 +284,7 @@ export class AgendamentosService {
         cliente_nome: dto.cliente_nome,
         cliente_wpp: dto.cliente_wpp,
         data_hora: dto.data_hora,
+        observacoes: dto.observacoes,
         status: 'pendente',
         agendamento_origem_id: origem.id,
       })

@@ -22,6 +22,7 @@ export interface Servico {
   id: string;
   profissional_id: string;
   nome: string;
+  descricao: string | null;
   duracao_min: number;
   preco: number;
   modalidade: string;
@@ -125,7 +126,12 @@ export class ServicosService {
       }
     }
 
-    const input = { ativo: true, ...dto, nome: this.normalizarNome(dto.nome) };
+    const input = {
+      ativo: true,
+      ...dto,
+      nome: this.normalizarNome(dto.nome),
+      descricao: dto.descricao?.trim() || null,
+    };
     await this.garantirNomeUnico(profId, input.nome);
 
     const { data, error } = await this.supabase
@@ -143,9 +149,11 @@ export class ServicosService {
     dto: AtualizarServicoDto,
   ): Promise<Servico> {
     const profId = this.requireProf(profissionalId);
-    const input = dto.nome
-      ? { ...dto, nome: this.normalizarNome(dto.nome) }
-      : dto;
+    const input = {
+      ...dto,
+      ...(dto.nome ? { nome: this.normalizarNome(dto.nome) } : {}),
+      ...(dto.descricao !== undefined ? { descricao: dto.descricao?.trim() || null } : {}),
+    };
 
     if (input.nome) {
       await this.garantirNomeUnico(profId, input.nome, id);
@@ -183,7 +191,7 @@ export class ServicosService {
   async listarAtivos(profissionalId: string): Promise<Partial<Servico>[]> {
     const { data, error } = await this.supabase
       .from('servicos')
-      .select('id, nome, duracao_min, preco, modalidade')
+      .select('id, nome, descricao, duracao_min, preco, modalidade')
       .eq('profissional_id', profissionalId)
       .eq('ativo', true)
       .order('created_at', { ascending: true });
