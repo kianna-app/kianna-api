@@ -1,11 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { SupabaseClient } from '@supabase/supabase-js';
 import * as Sentry from '@sentry/nestjs';
-import { createSupabaseClient } from '../../config/supabase.config';
 import { WppStatus } from '../../common/constants/lembrete.constants';
 import { RespostasService } from '../respostas/respostas.service';
-import { AuditoriaService } from '../auditoria/auditoria.service';
+import { WhatsappStatusService } from '../zapi/whatsapp-status.service';
 
 // Z-API publica vários tipos de evento. Listamos como string solta para
 // permitir tratar eventos novos sem quebrar o TypeScript.
@@ -25,15 +22,11 @@ interface MensagemRecebida {
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
-  private readonly supabase: SupabaseClient;
 
   constructor(
-    config: ConfigService,
     private readonly respostas: RespostasService,
-    private readonly auditoria: AuditoriaService,
-  ) {
-    this.supabase = createSupabaseClient(config);
-  }
+    private readonly whatsappStatus: WhatsappStatusService,
+  ) {}
 
   async processar(payload: Record<string, unknown>): Promise<void> {
     const tipo = (payload?.type as EventoZapi | undefined) ?? 'unknown';
@@ -121,39 +114,6 @@ export class WebhooksService {
       return;
     }
 
-    const { data: prof } = await this.supabase
-      .from('profissionais')
-      .select('id')
-      .eq('wpp_instance_id', instanceId)
-      .maybeSingle<{ id: string }>();
-
-    const { error } = await this.supabase
-      .from('profissionais')
-      .update({ wpp_status: status })
-      .eq('wpp_instance_id', instanceId);
-
-    if (error) {
-      this.logger.error(
-        `Erro ao atualizar wpp_status (${instanceId} → ${status}): ${error.message}`,
-      );
-      Sentry.captureException(
-        new Error(`Falha ao atualizar wpp_status: ${error.message}`),
-        { tags: { area: 'webhook_zapi' }, extra: { instanceId, status } },
-      );
-      return;
-    }
-    this.logger.log(`Instância ${instanceId}: ${status}`);
-
-    if (status === 'desconectado' && prof?.id) {
-      void this.auditoria.registrar({
-        ator_id: prof.id,
-        ator_tipo: 'sistema',
-        acao: 'wpp_desconectado',
-        recurso: 'whatsapp',
-        recurso_id: prof.id,
-        detalhes: { instance_id: instanceId },
-        resultado: 'sucesso',
-      });
-    }
+    await this.whatsappStatus.atualizarPorInstanceId(instanceId, status);
   }
 }

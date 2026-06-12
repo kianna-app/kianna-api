@@ -20,6 +20,7 @@ import { PlanosModule } from './modules/planos/planos.module';
 import { AvisosModule } from './modules/avisos/avisos.module';
 import { RelatorioModule } from './modules/relatorio/relatorio.module';
 import { AuditoriaModule } from './modules/auditoria/auditoria.module';
+import { NotificadoresModule } from './modules/notificadores/notificadores.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AuditoriaModule } from './modules/auditoria/auditoria.module';
     AvisosModule,
     RelatorioModule,
     AuditoriaModule,
+    NotificadoresModule,
   ],
   controllers: [AppController],
 })

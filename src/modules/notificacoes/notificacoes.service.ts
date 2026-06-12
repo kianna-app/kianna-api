@@ -20,6 +20,8 @@ interface WppConfig {
   slug: string;
 }
 
+type EstadoNotificacaoWhatsapp = 'enviada' | 'falha' | 'nao_enviada';
+
 interface NovaSolicitacaoEvt {
   profissional_id: string;
   cliente_nome: string;
@@ -87,20 +89,57 @@ export class NotificacoesService {
         phone,
         message,
       });
+      if (!ok) {
+        this.logger.warn(
+          'Notificação WhatsApp não entregue ' +
+            '(profissional=' +
+            profissionalId +
+            ', tipo=' +
+            contextoTipo +
+            ', motivo=provider_retornou_falha)',
+        );
+      }
+      await this.registrarEstadoNotificacao({
+        profissionalId,
+        tipo: contextoTipo,
+        destinatario: phone,
+        status: ok ? 'enviada' : 'falha',
+        motivo: ok ? null : 'provider_retornou_falha',
+      });
       void this.auditoria.registrar({
         ator_id: profissionalId,
         ator_tipo: 'sistema',
         acao: ok ? 'notificacao_enviada' : 'notificacao_falha',
         recurso: 'whatsapp',
         recurso_id: profissionalId,
-        detalhes: { tipo: contextoTipo },
+        detalhes: {
+          tipo: contextoTipo,
+          motivo: ok ? undefined : 'provider_retornou_falha',
+        },
         resultado: ok ? 'sucesso' : 'falha',
       });
       return ok;
     } catch (err) {
+      const erro = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        'Falha ao enviar notificação WhatsApp ' +
+          '(profissional=' +
+          profissionalId +
+          ', tipo=' +
+          contextoTipo +
+          '): ' +
+          erro,
+      );
       Sentry.captureException(err, {
         tags: { area: 'notificacoes', tipo: contextoTipo },
         extra: { profissional_id: profissionalId },
+      });
+      await this.registrarEstadoNotificacao({
+        profissionalId,
+        tipo: contextoTipo,
+        destinatario: phone,
+        status: 'falha',
+        motivo: erro,
       });
       void this.auditoria.registrar({
         ator_id: profissionalId,
@@ -110,11 +149,82 @@ export class NotificacoesService {
         recurso_id: profissionalId,
         detalhes: {
           tipo: contextoTipo,
-          erro: err instanceof Error ? err.message : String(err),
+          erro,
         },
         resultado: 'falha',
       });
       throw err;
+    }
+  }
+
+  private async registrarNotificacaoNaoEnviada(
+    profissionalId: string,
+    tipo: string,
+    motivo: string,
+    destinatario?: string | null,
+    detalhes?: Record<string, unknown>,
+  ): Promise<void> {
+    this.logger.warn(
+      'Notificação WhatsApp não enviada ' +
+        '(profissional=' +
+        profissionalId +
+        ', tipo=' +
+        tipo +
+        ', motivo=' +
+        motivo +
+        ')',
+    );
+    await this.registrarEstadoNotificacao({
+      profissionalId,
+      tipo,
+      destinatario,
+      status: 'nao_enviada',
+      motivo,
+      detalhes,
+    });
+    void this.auditoria.registrar({
+      ator_id: profissionalId,
+      ator_tipo: 'sistema',
+      acao: 'notificacao_falha',
+      recurso: 'whatsapp',
+      recurso_id: profissionalId,
+      detalhes: { tipo, motivo, ...(detalhes ?? {}) },
+      resultado: 'falha',
+    });
+  }
+
+  private async registrarEstadoNotificacao(params: {
+    profissionalId: string;
+    tipo: string;
+    destinatario?: string | null;
+    status: EstadoNotificacaoWhatsapp;
+    motivo?: string | null;
+    detalhes?: Record<string, unknown> | null;
+  }): Promise<void> {
+    const { error } = await this.supabase.from('whatsapp_notificacoes').insert({
+      profissional_id: params.profissionalId,
+      tipo: params.tipo,
+      destinatario: params.destinatario ?? null,
+      status: params.status,
+      motivo: params.motivo ?? null,
+      detalhes: params.detalhes ?? null,
+    });
+
+    if (error) {
+      this.logger.warn(
+        'Falha ao registrar estado da notificação WhatsApp ' +
+          '(' +
+          params.tipo +
+          '): ' +
+          error.message,
+      );
+      Sentry.captureException(
+        new Error('Registro de notificação WhatsApp falhou: ' + error.message),
+        {
+          tags: { area: 'notificacoes', tipo: params.tipo },
+          extra: { profissional_id: params.profissionalId },
+        },
+      );
     }
   }
 
@@ -125,6 +235,8 @@ export class NotificacoesService {
   /** Busca a configuração WhatsApp do profissional. Retorna null se não estiver pronto. */
   private async getWppConfig(
     profissionalId: string,
+    contextoTipo: string,
+    destinatario?: string,
   ): Promise<WppConfig | null> {
     const { data, error } = await this.supabase
       .from('profissionais')
@@ -134,17 +246,35 @@ export class NotificacoesService {
 
     if (error || !data) {
       this.logger.warn(
-        `Profissional ${profissionalId} não encontrado para notificação`,
+        'Profissional ' +
+          profissionalId +
+          ' não encontrado para notificação ' +
+          contextoTipo,
       );
       return null;
     }
+
     if (!data.wpp_instance_id || !data.wpp_token) {
-      this.logger.debug(`Profissional ${profissionalId} sem credenciais Z-API`);
+      await this.registrarNotificacaoNaoEnviada(
+        profissionalId,
+        contextoTipo,
+        'whatsapp_sem_credenciais',
+        destinatario ?? data.whatsapp,
+      );
       return null;
     }
+
     if (data.wpp_status !== 'conectado') {
-      this.logger.debug(
-        `Profissional ${profissionalId} com WhatsApp '${data.wpp_status}' — notificação ignorada`,
+      const motivo =
+        data.wpp_status === 'desconectado'
+          ? 'whatsapp_desconectado'
+          : 'whatsapp_status_' + data.wpp_status;
+      await this.registrarNotificacaoNaoEnviada(
+        profissionalId,
+        contextoTipo,
+        motivo,
+        destinatario ?? data.whatsapp,
+        { wpp_status: data.wpp_status },
       );
       return null;
     }
@@ -153,7 +283,10 @@ export class NotificacoesService {
 
   // ───── 1. Nova solicitação → notifica profissional ─────
   async notificarNovaSolicitacao(evt: NovaSolicitacaoEvt): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'nova_solicitacao_profissional',
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -175,7 +308,11 @@ export class NotificacoesService {
 
   // ───── 2. Confirmado → notifica cliente ─────
   async notificarConfirmacao(evt: EventoCliente): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'confirmacao_cliente',
+      evt.cliente_wpp,
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -198,7 +335,11 @@ export class NotificacoesService {
 
   // ───── 3. Recusado → notifica cliente ─────
   async notificarRecusa(evt: RecusaEvt): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'recusa_cliente',
+      evt.cliente_wpp,
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -226,7 +367,11 @@ export class NotificacoesService {
 
   // ───── 4. Cancelado pelo profissional → notifica cliente ─────
   async notificarCancelamentoProfissional(evt: EventoCliente): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'cancelamento_profissional_cliente',
+      evt.cliente_wpp,
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -249,7 +394,11 @@ export class NotificacoesService {
 
   // ───── 5. Reagendamento iniciado pelo profissional → envia link ao cliente ─────
   async notificarReagendamento(evt: ReagendamentoEvt): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'reagendamento_cliente',
+      evt.cliente_wpp,
+    );
     if (!wpp) return;
 
     const link = `${this.appUrl}/${wpp.slug}?reagendar=${evt.agendamento_id}`;
@@ -272,7 +421,10 @@ export class NotificacoesService {
   async notificarCancelamentoCliente(
     evt: Omit<NovaSolicitacaoEvt, never>,
   ): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'cancelamento_cliente_profissional',
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -294,7 +446,14 @@ export class NotificacoesService {
 
   // ───── 7. Lembrete antes do atendimento (usado pelo cron — PR4) ─────
   async enviarLembrete(evt: LembreteEvt): Promise<boolean> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const tipoLembrete = evt.cancelamento_auto
+      ? 'lembrete_botoes'
+      : 'lembrete_simples';
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      tipoLembrete,
+      evt.cliente_wpp,
+    );
     if (!wpp) return false;
 
     const data = this.formatarDataHora(evt.data_hora);
@@ -318,20 +477,55 @@ export class NotificacoesService {
             { id: 'cancelar_agendamento', label: '2 - Cancelar' },
           ],
         });
+        if (!ok) {
+          this.logger.warn(
+            'Notificação WhatsApp não entregue ' +
+              '(profissional=' +
+              evt.profissional_id +
+              ', tipo=lembrete_botoes, motivo=provider_retornou_falha)',
+          );
+        }
+        await this.registrarEstadoNotificacao({
+          profissionalId: evt.profissional_id,
+          tipo: 'lembrete_botoes',
+          destinatario: evt.cliente_wpp,
+          status: ok ? 'enviada' : 'falha',
+          motivo: ok ? null : 'provider_retornou_falha',
+          detalhes: { agendamento_id: evt.agendamento_id },
+        });
         void this.auditoria.registrar({
           ator_id: evt.profissional_id,
           ator_tipo: 'sistema',
           acao: ok ? 'notificacao_enviada' : 'notificacao_falha',
           recurso: 'whatsapp',
           recurso_id: evt.profissional_id,
-          detalhes: { tipo: 'lembrete_botoes', agendamento_id: evt.agendamento_id },
+          detalhes: {
+            tipo: 'lembrete_botoes',
+            agendamento_id: evt.agendamento_id,
+          },
           resultado: ok ? 'sucesso' : 'falha',
         });
         return ok;
       } catch (err) {
+        const erro = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          'Falha ao enviar notificação WhatsApp ' +
+            '(profissional=' +
+            evt.profissional_id +
+            ', tipo=lembrete_botoes): ' +
+            erro,
+        );
         Sentry.captureException(err, {
           tags: { area: 'notificacoes', tipo: 'lembrete_botoes' },
           extra: { profissional_id: evt.profissional_id },
+        });
+        await this.registrarEstadoNotificacao({
+          profissionalId: evt.profissional_id,
+          tipo: 'lembrete_botoes',
+          destinatario: evt.cliente_wpp,
+          status: 'falha',
+          motivo: erro,
+          detalhes: { agendamento_id: evt.agendamento_id },
         });
         void this.auditoria.registrar({
           ator_id: evt.profissional_id,
@@ -342,7 +536,7 @@ export class NotificacoesService {
           detalhes: {
             tipo: 'lembrete_botoes',
             agendamento_id: evt.agendamento_id,
-            erro: err instanceof Error ? err.message : String(err),
+            erro,
           },
           resultado: 'falha',
         });
@@ -386,7 +580,11 @@ export class NotificacoesService {
   }
   // ───── 1b. Nova solicitação → confirma recebimento ao CLIENTE ─────
   async notificarSolicitacaoRecebidaCliente(evt: EventoCliente): Promise<void> {
-    const wpp = await this.getWppConfig(evt.profissional_id);
+    const wpp = await this.getWppConfig(
+      evt.profissional_id,
+      'solicitacao_recebida_cliente',
+      evt.cliente_wpp,
+    );
     if (!wpp) return;
 
     const data = this.formatarDataHora(evt.data_hora);

@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   Get,
   Inject,
-  Logger,
   NotFoundException,
   Post,
   UnauthorizedException,
@@ -18,6 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { WppStatus } from '../../common/constants/lembrete.constants';
 import { WHATSAPP_PROVIDER } from './whatsapp-provider.interface';
+import { WhatsappStatusService } from './whatsapp-status.service';
 import type {
   WhatsappCredentials,
   WhatsappProvider,
@@ -30,17 +30,18 @@ interface ProfWppRow {
   wpp_instance_id: string | null;
   wpp_token: string | null;
   wpp_status: WppStatus;
+  wpp_desconectado_em: string | null;
 }
 
 @ApiTags('whatsapp')
 @Controller('api/whatsapp')
 export class ZapiController {
-  private readonly logger = new Logger(ZapiController.name);
   private readonly supabase: SupabaseClient;
 
   constructor(
     @Inject(WHATSAPP_PROVIDER)
     private readonly whatsapp: WhatsappProvider,
+    private readonly whatsappStatus: WhatsappStatusService,
     config: ConfigService,
   ) {
     this.supabase = createSupabaseClient(config);
@@ -62,7 +63,7 @@ export class ZapiController {
         'Não foi possível gerar o QR Code. Verifique o Instance ID e Token.',
       );
     }
-    await this.atualizarStatus(prof.id, 'conectando');
+    await this.whatsappStatus.atualizarPorProfissionalId(prof.id, 'conectando');
     return { qrCode };
   }
 
@@ -78,8 +79,11 @@ export class ZapiController {
     const prof = await this.requireProf(profissionalId);
     const r = await this.whatsapp.getConnectionStatus(this.creds(prof));
     const novoStatus: WppStatus = r.connected ? 'conectado' : 'desconectado';
-    if (novoStatus !== prof.wpp_status) {
-      await this.atualizarStatus(prof.id, novoStatus);
+    if (
+      novoStatus !== prof.wpp_status ||
+      (novoStatus === 'desconectado' && !prof.wpp_desconectado_em)
+    ) {
+      await this.whatsappStatus.atualizarPorProfissionalId(prof.id, novoStatus);
     }
     return { status: novoStatus };
   }
@@ -95,7 +99,10 @@ export class ZapiController {
     this.requireWhatsappAccess(plano);
     const prof = await this.requireProf(profissionalId);
     await this.whatsapp.disconnect(this.creds(prof));
-    await this.atualizarStatus(prof.id, 'desconectado');
+    await this.whatsappStatus.atualizarPorProfissionalId(
+      prof.id,
+      'desconectado',
+    );
     return { status: 'desconectado' };
   }
 
@@ -105,7 +112,8 @@ export class ZapiController {
       throw new ForbiddenException({
         code: 'PLAN_LIMIT_REACHED',
         resource: 'whatsapp',
-        message: 'Seu plano não inclui integração com WhatsApp. Faça upgrade para o plano Pro ou Studio.',
+        message:
+          'Seu plano não inclui integração com WhatsApp. Faça upgrade para o plano Pro ou Studio.',
       });
     }
   }
@@ -125,7 +133,7 @@ export class ZapiController {
 
     const { data, error } = await this.supabase
       .from('profissionais')
-      .select('id, wpp_instance_id, wpp_token, wpp_status')
+      .select('id, wpp_instance_id, wpp_token, wpp_status, wpp_desconectado_em')
       .eq('id', profissionalId)
       .single<ProfWppRow>();
 
@@ -138,18 +146,5 @@ export class ZapiController {
       );
     }
     return data;
-  }
-
-  private async atualizarStatus(
-    profissionalId: string,
-    status: WppStatus,
-  ): Promise<void> {
-    const { error } = await this.supabase
-      .from('profissionais')
-      .update({ wpp_status: status })
-      .eq('id', profissionalId);
-    if (error) {
-      this.logger.error(`Erro ao atualizar wpp_status: ${error.message}`);
-    }
   }
 }

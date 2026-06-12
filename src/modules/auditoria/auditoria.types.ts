@@ -13,12 +13,10 @@ export type AuditoriaAcao =
   | 'credencial_zapi_atualizada'
   | 'notificacao_enviada'
   | 'notificacao_falha'
-  | 'wpp_desconectado';
+  | 'wpp_desconectado'
+  | 'wpp_aviso_desconexao';
 
-export type AuditoriaRecurso =
-  | 'sessao'
-  | 'profissional'
-  | 'whatsapp';
+export type AuditoriaRecurso = 'sessao' | 'profissional' | 'whatsapp';
 
 export interface AuditoriaEvento {
   ator_id?: string | null;
